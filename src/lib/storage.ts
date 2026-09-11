@@ -43,9 +43,13 @@ function hasNonEmptyString(record: Record<string, unknown>, key: string): boolea
 }
 
 function isIsoDateString(value: unknown): value is string {
-  return typeof value === 'string'
-    && /^\d{4}-\d{2}-\d{2}T/.test(value)
-    && !Number.isNaN(Date.parse(value));
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{3})?Z$/.exec(value);
+  if (!match || Number.isNaN(Date.parse(value))) return false;
+  const date = new Date(value);
+  return date.getUTCFullYear() === Number(match[1])
+    && date.getUTCMonth() + 1 === Number(match[2])
+    && date.getUTCDate() === Number(match[3]);
 }
 
 function isFiniteNonNegative(value: unknown): value is number {

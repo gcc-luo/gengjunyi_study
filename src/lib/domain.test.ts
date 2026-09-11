@@ -100,6 +100,8 @@ describe('learning domain rules', () => {
       { ...valid, courses: [{ ...valid.courses[0], createdAt: 'not-a-date' }] },
       { ...valid, courses: [{ ...valid.courses[0], updatedAt: '2026-09-11 10:00:00' }] },
       { ...valid, videos: [{ ...valid.videos[0], createdAt: '2026-99-99T10:00:00.000Z' }] },
+      { ...valid, courses: [{ ...valid.courses[0], createdAt: '2026-02-29T00:00:00Z' }] },
+      { ...valid, videos: [{ ...valid.videos[0], createdAt: '2026-04-31T00:00:00.000Z' }] },
       { ...valid, watchProgress: [{ ...valid.watchProgress[0], updatedAt: '2026-09-11T-not-time' }] },
       { ...valid, watchEvents: [{ ...valid.watchEvents[0], occurredAt: '2026-09-11T-not-time' }] },
       { ...valid, favorites: [{ ...valid.favorites[0], createdAt: '2026-09-11T' }] },
@@ -217,6 +219,15 @@ describe('learning domain rules', () => {
   it('does not create watch time while paused', () => {
     expect(addWatchEvent([], { childId: 'child-1', videoId: 'v1', isPlaying: false, deltaWatchSeconds: 10, positionSeconds: 20, occurredAt: '2026-09-11T01:00:00.000Z' })).toHaveLength(0);
     expect(addWatchEvent([], { childId: 'child-1', videoId: 'v1', isPlaying: true, deltaWatchSeconds: 10, positionSeconds: 20, occurredAt: '2026-09-11T01:00:00.000Z' })).toHaveLength(1);
+  });
+
+  it('requires a boolean isPlaying value for watch events', () => {
+    const input = { childId: 'child-1', videoId: 'v1', deltaWatchSeconds: 10, positionSeconds: 20 };
+    expect(() => addWatchEvent([], input as never)).toThrow(TypeError);
+    expect(() => addWatchEvent([], { ...input, isPlaying: 'yes' } as never)).toThrow(TypeError);
+
+    const events: WatchEvent[] = [{ id: 'existing', childId: 'child-1', videoId: 'v1', effectiveWatchSeconds: 10, occurredAt: '2026-09-11T01:00:00.000Z' }];
+    expect(addWatchEvent(events, { ...input, isPlaying: false })).toBe(events);
   });
 
   it('counts days with at least 60 effective seconds in a streak', () => {

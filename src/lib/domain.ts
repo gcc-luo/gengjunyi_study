@@ -48,6 +48,9 @@ export function createProgressUpdate(
 }
 
 export function addWatchEvent(events: WatchEvent[], input: { childId: string; videoId: string; isPlaying: boolean; deltaWatchSeconds: number; positionSeconds: number; occurredAt?: string }): WatchEvent[] {
+  if (typeof input?.isPlaying !== 'boolean') {
+    throw new TypeError('isPlaying must be a boolean');
+  }
   const effectiveWatchSeconds = clampFinite(input.deltaWatchSeconds, 0, MAX_REASONABLE_SECONDS);
   if (!input.isPlaying || effectiveWatchSeconds <= 0) return events;
   const event: WatchEvent = {
