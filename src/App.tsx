@@ -1,6 +1,13 @@
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 import { ParentShell } from './components/ParentShell';
 import { ChildShell } from './components/ChildShell';
+import { OverviewPage } from './features/parent/OverviewPage';
+import { CoursesPage } from './features/parent/CoursesPage';
+import { CourseDetail } from './features/parent/CourseDetail';
+import { UploadsPage } from './features/parent/UploadsPage';
+import { ChildrenPage } from './features/parent/ChildrenPage';
+import { RecordsPage } from './features/parent/RecordsPage';
+import { SettingsPage } from './features/parent/SettingsPage';
 
 function LandingPage() {
   return (
@@ -30,13 +37,14 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/parent" element={<ParentShell />}>
-          <Route index element={<RoutePlaceholder title="家长端概览" />} />
-          <Route path="overview" element={<RoutePlaceholder title="家长端概览" />} />
-          <Route path="courses" element={<RoutePlaceholder title="课程管理" />} />
-          <Route path="uploads" element={<RoutePlaceholder title="视频上传" />} />
-          <Route path="children" element={<RoutePlaceholder title="孩子管理" />} />
-          <Route path="records" element={<RoutePlaceholder title="学习记录" />} />
-          <Route path="settings" element={<RoutePlaceholder title="设置" />} />
+          <Route index element={<OverviewPage />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="courses" element={<CoursesPage />} />
+          <Route path="courses/:courseId" element={<CourseDetail />} />
+          <Route path="uploads" element={<UploadsPage />} />
+          <Route path="children" element={<ChildrenPage />} />
+          <Route path="records" element={<RecordsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="/child" element={<ChildShell />}>
           <Route index element={<RoutePlaceholder title="选择孩子" />} />

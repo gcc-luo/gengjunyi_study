@@ -3,12 +3,14 @@ import { addWatchEvent, canPublishCourse, createProgressUpdate, type PublishResu
 import { loadSnapshot, persistSnapshot, resetStorage } from '../lib/storage';
 import { ChildStatus, CourseStatus, VideoStatus, type Child, type Course, type Favorite, type Snapshot, type UploadTask, type Video, type WatchEvent, type WatchProgress } from '../types/domain';
 
-type CourseInput = Partial<Pick<Course, 'description' | 'ageRange' | 'cover'>> & Pick<Course, 'title' | 'subjectId'>;
-type VideoInput = Pick<Video, 'title' | 'fileName' | 'durationSeconds'> & Partial<Pick<Video, 'status'>>;
+type CourseInput = Partial<Pick<Course, 'description' | 'ageRange' | 'cover' | 'videoIds'>> & Pick<Course, 'title' | 'subjectId'>;
+type VideoInput = Pick<Video, 'title' | 'fileName' | 'durationSeconds'> & Partial<Pick<Video, 'status' | 'orderIndex'>>;
 type ProgressInput = Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; updatedAt?: string };
 type ChildInput = Pick<Child, 'name' | 'avatar' | 'grade'>;
+type ChildUpdate = Partial<ChildInput> & Partial<Pick<Child, 'status'>>;
 
 export interface AppStoreValue {
+  snapshot: Snapshot;
   currentChildId: string | null;
   currentChild: Child | undefined;
   setCurrentChild: (id: string | null) => void;
@@ -29,7 +31,7 @@ export interface AppStoreValue {
   updateVideo: (id: string, input: Partial<VideoInput>) => Video | undefined;
   removeVideo: (id: string) => void;
   createChild: (input: ChildInput) => Child;
-  updateChild: (id: string, input: Partial<ChildInput>) => Child | undefined;
+  updateChild: (id: string, input: ChildUpdate) => Child | undefined;
   deactivateChild: (id: string) => Child | undefined;
   saveWatchProgress: (input: ProgressInput) => WatchProgress;
   toggleFavorite: (input: { courseId?: string; videoId?: string }) => Favorite | undefined;
@@ -73,7 +75,7 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
     const updateVideo = (id: string, input: Partial<VideoInput>) => { const video = snapshotRef.current.videos.find((item) => item.id === id); if (!video) return undefined; const next = { ...video, ...input }; update((draft) => { const index = draft.videos.findIndex((item) => item.id === id); draft.videos[index] = next; }); return next; };
     const removeVideo = (id: string) => update((draft) => { draft.videos = draft.videos.filter((video) => video.id !== id); draft.courses.forEach((course) => { course.videoIds = course.videoIds.filter((videoId) => videoId !== id); }); });
     const createChild = (input: ChildInput) => { const child: Child = { ...input, id: newId('child'), status: ChildStatus.ACTIVE, createdAt: now() }; update((draft) => draft.children.push(child)); return child; };
-    const updateChild = (id: string, input: Partial<ChildInput>) => { const child = snapshotRef.current.children.find((item) => item.id === id); if (!child) return undefined; const next = { ...child, ...input }; update((draft) => { const index = draft.children.findIndex((item) => item.id === id); draft.children[index] = next; }); return next; };
+    const updateChild = (id: string, input: ChildUpdate) => { const child = snapshotRef.current.children.find((item) => item.id === id); if (!child) return undefined; const next = { ...child, ...input }; update((draft) => { const index = draft.children.findIndex((item) => item.id === id); draft.children[index] = next; }); return next; };
     const deactivateChild = (id: string) => { const child = snapshotRef.current.children.find((item) => item.id === id); if (!child) return undefined; const next = { ...child, status: ChildStatus.INACTIVE }; update((draft) => { const target = draft.children.find((item) => item.id === id); if (target) target.status = ChildStatus.INACTIVE; }); if (currentChildId === id) setCurrentChildId(null); return next; };
     const saveWatchProgress = (input: ProgressInput) => {
       if (!currentChildId) throw new Error('当前孩子未选择，不能保存学习进度');
@@ -88,7 +90,7 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
       return nextProgress;
     };
     const toggleFavorite = (input: { courseId?: string; videoId?: string }) => { if (!currentChildId || (!input.courseId && !input.videoId)) return undefined; const existing = snapshotRef.current.favorites.find((item) => item.childId === currentChildId && item.courseId === input.courseId && item.videoId === input.videoId); if (existing) { update((draft) => { draft.favorites = draft.favorites.filter((item) => item.id !== existing.id); }); return undefined; } const favorite: Favorite = { id: newId('favorite'), childId: currentChildId, ...input, createdAt: now() }; update((draft) => draft.favorites.push(favorite)); return favorite; };
-    return { currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, resetSnapshot: (next?: Snapshot) => commit(next ?? resetStorage()) };
+    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, resetSnapshot: (next?: Snapshot) => commit(next ?? resetStorage()) };
   }, [snapshot, currentChildId]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
