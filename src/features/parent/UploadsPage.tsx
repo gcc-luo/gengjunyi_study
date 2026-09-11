@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ProgressBar } from '../../components/ProgressBar';
-import { StatusBadge } from '../../components/StatusBadge';
 import { useAppStore } from '../../context/AppStore';
 import { naturalCompare } from '../../lib/domain';
 import { type UploadTask } from '../../types/domain';
@@ -10,11 +9,11 @@ const accepted = (name: string) => /\.(mp4|mov)$/i.test(name);
 const taskStatus: Record<UploadTask['status'], string> = { QUEUED: '排队中', UPLOADING: '上传中', COMPLETED: '已完成', CANCELLED: '已取消', FAILED: '失败' };
 
 export function UploadsPage() {
-  const { courses, uploadTasks, addVideo, createUploadTask, updateUploadTask } = useAppStore(); const location = useLocation(); const presetCourse = new URLSearchParams(location.search).get('course') ?? '';
-  const [courseId, setCourseId] = useState(presetCourse); const [error, setError] = useState(''); const inputRef = useRef<HTMLInputElement>(null); const taskRef = useRef(uploadTasks); const progressRef = useRef<Record<string, number>>({}); const updateTaskRef = useRef(updateUploadTask); const addVideoRef = useRef(addVideo); const addedTaskIds = useRef(new Set<string>()); const failedTaskIds = useRef(new Set<string>());
-  taskRef.current = uploadTasks; updateTaskRef.current = updateUploadTask; addVideoRef.current = addVideo;
+  const { courses, uploadTasks, createUploadTask, updateUploadTask, completeUploadTask } = useAppStore(); const location = useLocation(); const presetCourse = new URLSearchParams(location.search).get('course') ?? '';
+  const [courseId, setCourseId] = useState(presetCourse); const [error, setError] = useState(''); const inputRef = useRef<HTMLInputElement>(null); const taskRef = useRef(uploadTasks); const progressRef = useRef<Record<string, number>>({}); const updateTaskRef = useRef(updateUploadTask); const completeTaskRef = useRef(completeUploadTask); const failedTaskIds = useRef(new Set<string>());
+  taskRef.current = uploadTasks; updateTaskRef.current = updateUploadTask; completeTaskRef.current = completeUploadTask;
   useEffect(() => { const timer = window.setInterval(() => { taskRef.current.filter((task) => task.status === 'QUEUED' || task.status === 'UPLOADING').forEach((task) => { const nextProgress = Math.min(100, (progressRef.current[task.id] ?? task.progress) + 14); progressRef.current[task.id] = nextProgress; if (task.fileName.toLowerCase().includes('fail') && nextProgress >= 56 && !failedTaskIds.current.has(task.id)) { failedTaskIds.current.add(task.id); updateTaskRef.current(task.id, { status: 'FAILED', progress: nextProgress, error: '模拟网络中断，请重试' }); } else if (nextProgress >= 100) updateTaskRef.current(task.id, { status: 'COMPLETED', progress: 100, error: undefined }); else updateTaskRef.current(task.id, { status: 'UPLOADING', progress: nextProgress }); }); }, 120); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { uploadTasks.filter((task) => task.status === 'COMPLETED' && !addedTaskIds.current.has(task.id)).forEach((task) => { addedTaskIds.current.add(task.id); addVideoRef.current(task.courseId, { title: task.fileName.replace(/\.(mp4|mov)$/i, ''), fileName: task.fileName, durationSeconds: 180, status: 'READY' }); }); }, [uploadTasks]);
+  useEffect(() => { uploadTasks.filter((task) => task.status === 'COMPLETED' && !task.videoId).forEach((task) => { completeTaskRef.current(task.id, { title: task.fileName.replace(/\.(mp4|mov)$/i, ''), durationSeconds: 180 }); }); }, [uploadTasks]);
   const enqueue = (incoming: FileList | File[]) => { if (!courseId) { setError('请先选择所属课程'); return; } const files = Array.from(incoming); const invalid = files.filter((file) => !accepted(file.name)); const valid = files.filter((file) => accepted(file.name)).sort((a, b) => naturalCompare(a.name, b.name)); setError(invalid.length ? `${invalid.map((file) => `“${file.name}”`).join('、')}格式不支持，仅支持 MP4 / MOV。` : ''); valid.forEach((file) => createUploadTask({ courseId, fileName: file.name })); };
   const retry = (task: UploadTask) => { progressRef.current[task.id] = 0; failedTaskIds.current.delete(task.id); updateUploadTask(task.id, { status: 'QUEUED', progress: 0, error: undefined }); };
   const cancel = (task: UploadTask) => updateUploadTask(task.id, { status: 'CANCELLED' });

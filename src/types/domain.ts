@@ -87,6 +87,7 @@ export interface UploadTask {
   progress: number;
   status: 'QUEUED' | 'UPLOADING' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
   error?: string;
+  videoId?: string;
 }
 
 export interface Snapshot {

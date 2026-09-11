@@ -9,6 +9,7 @@ type ProgressInput = Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSe
 type ChildInput = Pick<Child, 'name' | 'avatar' | 'grade'>;
 type ChildUpdate = Partial<ChildInput> & Partial<Pick<Child, 'status'>>;
 type UploadTaskInput = Pick<UploadTask, 'courseId' | 'fileName'>;
+type UploadVideoInput = Pick<Video, 'title' | 'durationSeconds'>;
 
 export interface AppStoreValue {
   snapshot: Snapshot;
@@ -38,6 +39,7 @@ export interface AppStoreValue {
   toggleFavorite: (input: { courseId?: string; videoId?: string }) => Favorite | undefined;
   createUploadTask: (input: UploadTaskInput) => UploadTask;
   updateUploadTask: (id: string, input: Partial<UploadTask>) => UploadTask | undefined;
+  completeUploadTask: (id: string, input: UploadVideoInput) => Video | undefined;
   resetSnapshot: (snapshot?: Snapshot) => void;
 }
 
@@ -95,8 +97,33 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
     const toggleFavorite = (input: { courseId?: string; videoId?: string }) => { if (!currentChildId || (!input.courseId && !input.videoId)) return undefined; const existing = snapshotRef.current.favorites.find((item) => item.childId === currentChildId && item.courseId === input.courseId && item.videoId === input.videoId); if (existing) { update((draft) => { draft.favorites = draft.favorites.filter((item) => item.id !== existing.id); }); return undefined; } const favorite: Favorite = { id: newId('favorite'), childId: currentChildId, ...input, createdAt: now() }; update((draft) => draft.favorites.push(favorite)); return favorite; };
     const createUploadTask = (input: UploadTaskInput) => { const task: UploadTask = { id: newId('upload'), courseId: input.courseId, fileName: input.fileName, progress: 0, status: 'QUEUED' }; update((draft) => draft.uploadTasks.push(task)); return task; };
     const updateUploadTask = (id: string, input: Partial<UploadTask>) => { const task = snapshotRef.current.uploadTasks.find((item) => item.id === id); if (!task) return undefined; const next = { ...task, ...input }; update((draft) => { const index = draft.uploadTasks.findIndex((item) => item.id === id); draft.uploadTasks[index] = next; }); return next; };
+    const completeUploadTask = (id: string, input: UploadVideoInput) => {
+      const current = snapshotRef.current;
+      const task = current.uploadTasks.find((item) => item.id === id);
+      if (!task) return undefined;
+      const linkedVideo = task.videoId ? current.videos.find((video) => video.id === task.videoId) : undefined;
+      if (linkedVideo) return linkedVideo;
+      const legacyVideo = current.videos.find((video) => video.courseId === task.courseId && video.fileName === task.fileName && video.title === input.title);
+      if (legacyVideo) {
+        update((draft) => {
+          const target = draft.uploadTasks.find((item) => item.id === id);
+          if (target) { target.videoId = legacyVideo.id; target.status = 'COMPLETED'; target.progress = 1; target.error = undefined; }
+        });
+        return legacyVideo;
+      }
+      const orderIndex = Math.max(0, ...current.videos.filter((video) => video.courseId === task.courseId).map((video) => video.orderIndex)) + 1;
+      const video: Video = { id: newId('video'), courseId: task.courseId, title: input.title, fileName: task.fileName, durationSeconds: input.durationSeconds, status: VideoStatus.READY, orderIndex, createdAt: now() };
+      update((draft) => {
+        draft.videos.push(video);
+        const course = draft.courses.find((item) => item.id === task.courseId);
+        if (course && !course.videoIds.includes(video.id)) course.videoIds.push(video.id);
+        const target = draft.uploadTasks.find((item) => item.id === id);
+        if (target) { target.videoId = video.id; target.status = 'COMPLETED'; target.progress = 1; target.error = undefined; }
+      });
+      return video;
+    };
     const resetSnapshotCommand = (next?: Snapshot) => { const replacement = next ?? resetStorage(); commit(replacement); setCurrentChildId(replacement.children.find((child) => child.status === ChildStatus.ACTIVE)?.id ?? null); };
-    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, createUploadTask, updateUploadTask, resetSnapshot: resetSnapshotCommand };
+    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, createUploadTask, updateUploadTask, completeUploadTask, resetSnapshot: resetSnapshotCommand };
   }, [snapshot, currentChildId]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;

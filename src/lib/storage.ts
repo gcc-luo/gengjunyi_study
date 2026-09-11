@@ -149,7 +149,8 @@ function isUploadTask(value: unknown): value is UploadTask {
     && hasNonEmptyString(value, 'fileName')
     && isProgress(value.progress)
     && typeof value.status === 'string' && UPLOAD_STATUSES.has(value.status)
-    && (value.error === undefined || typeof value.error === 'string');
+    && (value.error === undefined || typeof value.error === 'string')
+    && (value.videoId === undefined || hasNonEmptyString(value, 'videoId'));
 }
 
 function isSnapshot(value: unknown): value is Snapshot {

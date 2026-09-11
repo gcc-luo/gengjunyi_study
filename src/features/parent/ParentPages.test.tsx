@@ -214,4 +214,17 @@ describe('parent management pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存视频' }));
     expect(screen.getByText('静夜思（更新版）')).toBeInTheDocument();
   });
+
+  it('does not add a completed upload task again after remounting', () => {
+    localStorage.clear();
+    const snapshot = createSeedSnapshot();
+    snapshot.uploadTasks = [{ id: 'upload-completed', courseId: 'course-chinese', fileName: '第99课.mp4', progress: 1, status: 'COMPLETED' }];
+    renderRoute('/parent/uploads', snapshot);
+    cleanup();
+
+    window.history.pushState({}, '', '/parent/uploads');
+    render(<AppStoreProvider><App /></AppStoreProvider>);
+    const persisted = JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}');
+    expect(persisted.videos.filter((video: { courseId: string; fileName: string }) => video.courseId === 'course-chinese' && video.fileName === '第99课.mp4')).toHaveLength(1);
+  });
 });
