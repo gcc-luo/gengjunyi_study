@@ -58,8 +58,8 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
   };
 
   const value = useMemo<AppStoreValue>(() => {
-    const scopedProgress = snapshot.watchProgress.filter((item) => !currentChildId || item.childId === currentChildId);
-    const scopedEvents = snapshot.watchEvents.filter((item) => !currentChildId || item.childId === currentChildId);
+    const scopedProgress = currentChildId ? snapshot.watchProgress.filter((item) => item.childId === currentChildId) : [];
+    const scopedEvents = currentChildId ? snapshot.watchEvents.filter((item) => item.childId === currentChildId) : [];
     const setCurrentChild = (id: string | null) => setCurrentChildId(id && snapshot.children.some((child) => child.id === id && child.status === ChildStatus.ACTIVE) ? id : null);
     const createCourse = (input: CourseInput) => {
       const course: Course = { id: newId('course'), title: input.title, subjectId: input.subjectId, description: input.description ?? '', ageRange: input.ageRange ?? '', cover: input.cover ?? { style: 'sunrise', colors: ['#2D86F5', '#9ED8FF'] }, status: CourseStatus.DRAFT, videoIds: [], createdAt: now(), updatedAt: now() };
@@ -88,7 +88,7 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
       return nextProgress;
     };
     const toggleFavorite = (input: { courseId?: string; videoId?: string }) => { if (!currentChildId || (!input.courseId && !input.videoId)) return undefined; const existing = snapshot.favorites.find((item) => item.childId === currentChildId && item.courseId === input.courseId && item.videoId === input.videoId); if (existing) { update((draft) => { draft.favorites = draft.favorites.filter((item) => item.id !== existing.id); }); return undefined; } const favorite: Favorite = { id: newId('favorite'), childId: currentChildId, ...input, createdAt: now() }; update((draft) => draft.favorites.push(favorite)); return favorite; };
-    return { currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: snapshot.favorites.filter((item) => !currentChildId || item.childId === currentChildId), uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, resetSnapshot: (next = loadSnapshot()) => commit(next) };
+    return { currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, resetSnapshot: (next = loadSnapshot()) => commit(next) };
   }, [snapshot, currentChildId]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;

@@ -104,4 +104,17 @@ describe('AppStore', () => {
     const afterProgress = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     expect(afterProgress.watchProgress).toEqual(expect.arrayContaining([expect.objectContaining({ childId: 'child-gege', videoId: 'video-chinese-2' })]));
   });
+
+  it('returns an empty child scope and preserves storage when no child is selected', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+    act(() => result.current.selectChild(null));
+    const before = localStorage.getItem(STORAGE_KEY);
+
+    expect(result.current.currentChild).toBeUndefined();
+    expect(result.current.progress).toEqual([]);
+    expect(result.current.watchEvents).toEqual([]);
+    expect(result.current.favorites).toEqual([]);
+    expect(() => result.current.saveWatchProgress({ childId: 'child-gege', videoId: 'video-chinese-2', lastPositionSeconds: 20, progress: 0.2, deltaWatchSeconds: 10, isPlaying: true })).toThrow('当前孩子');
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(before);
+  });
 });
