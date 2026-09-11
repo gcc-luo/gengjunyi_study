@@ -76,6 +76,18 @@ describe('learning domain rules', () => {
     expect(COMPLETION_THRESHOLD).toBe(0.9);
   });
 
+  it('does not accumulate progress watch time when paused', () => {
+    const previous: WatchProgress = {
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 20, maxProgress: 0.2,
+      completed: false, totalWatchSeconds: 30, updatedAt: '2026-09-01T00:00:00.000Z',
+    };
+    const updated = createProgressUpdate(previous, {
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 30, progress: 0.3,
+      deltaWatchSeconds: 10, isPlaying: false,
+    });
+    expect(updated.totalWatchSeconds).toBe(30);
+  });
+
   it('marks 90 percent as completed', () => {
     expect(createProgressUpdate(undefined, {
       childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 108, progress: 0.9, deltaWatchSeconds: 0,

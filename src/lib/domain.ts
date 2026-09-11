@@ -20,7 +20,7 @@ export function canPublishCourse(course: Course, videos: Video[]): PublishResult
 
 export function createProgressUpdate(
   previous: WatchProgress | undefined,
-  input: Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; updatedAt?: string },
+  input: Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying?: boolean; updatedAt?: string },
 ): WatchProgress {
   const maxProgress = Math.max(previous?.maxProgress ?? 0, input.progress);
   return {
@@ -29,7 +29,7 @@ export function createProgressUpdate(
     lastPositionSeconds: input.lastPositionSeconds,
     maxProgress,
     completed: maxProgress >= COMPLETION_THRESHOLD,
-    totalWatchSeconds: (previous?.totalWatchSeconds ?? 0) + Math.max(0, input.deltaWatchSeconds),
+    totalWatchSeconds: (previous?.totalWatchSeconds ?? 0) + (input.isPlaying === false ? 0 : Math.max(0, input.deltaWatchSeconds)),
     updatedAt: input.updatedAt ?? new Date().toISOString(),
   };
 }
