@@ -93,6 +93,26 @@ describe('learning domain rules', () => {
     expect(localStorage.getItem('unrelated')).toBe('keep');
   });
 
+  it('recovers seed when stored date fields are not valid ISO dates', () => {
+    const valid = loadSnapshot();
+    const invalidSnapshots: unknown[] = [
+      { ...valid, children: [{ ...valid.children[0], createdAt: '2026-09-11' }] },
+      { ...valid, courses: [{ ...valid.courses[0], createdAt: 'not-a-date' }] },
+      { ...valid, courses: [{ ...valid.courses[0], updatedAt: '2026-09-11 10:00:00' }] },
+      { ...valid, videos: [{ ...valid.videos[0], createdAt: '2026-99-99T10:00:00.000Z' }] },
+      { ...valid, watchProgress: [{ ...valid.watchProgress[0], updatedAt: '2026-09-11T-not-time' }] },
+      { ...valid, watchEvents: [{ ...valid.watchEvents[0], occurredAt: '2026-09-11T-not-time' }] },
+      { ...valid, favorites: [{ ...valid.favorites[0], createdAt: '2026-09-11T' }] },
+    ];
+    localStorage.setItem('unrelated', 'keep');
+
+    for (const invalid of invalidSnapshots) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(invalid));
+      expect(loadSnapshot()).toEqual(valid);
+    }
+    expect(localStorage.getItem('unrelated')).toBe('keep');
+  });
+
   it('sorts lesson names naturally', () => {
     expect(naturalCompare('第10课', '第2课')).toBeGreaterThan(0);
   });
@@ -152,6 +172,23 @@ describe('learning domain rules', () => {
     expect(clamped.lastPositionSeconds).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
     expect(clamped.maxProgress).toBe(1);
     expect(clamped.totalWatchSeconds).toBe(0);
+  });
+
+  it('caps progress accumulation at MAX_SAFE_INTEGER', () => {
+    const updated = createProgressUpdate({
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 0, maxProgress: 0,
+      completed: false, totalWatchSeconds: Number.MAX_SAFE_INTEGER - 5, updatedAt: '2026-09-01T00:00:00.000Z',
+    }, {
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: Number.MAX_SAFE_INTEGER,
+      progress: 0, deltaWatchSeconds: 10, isPlaying: true,
+    });
+    expect(updated.totalWatchSeconds).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('requires a boolean isPlaying value at runtime', () => {
+    const input = { childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 0, progress: 0, deltaWatchSeconds: 0 };
+    expect(() => createProgressUpdate(undefined, input as never)).toThrow(TypeError);
+    expect(() => createProgressUpdate(undefined, { ...input, isPlaying: 'yes' } as never)).toThrow(TypeError);
   });
 
   it('marks 90 percent as completed', () => {

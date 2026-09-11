@@ -42,6 +42,12 @@ function hasNonEmptyString(record: Record<string, unknown>, key: string): boolea
   return typeof record[key] === 'string' && record[key].trim().length > 0;
 }
 
+function isIsoDateString(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}T/.test(value)
+    && !Number.isNaN(Date.parse(value));
+}
+
 function isFiniteNonNegative(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
@@ -69,7 +75,7 @@ function isChild(value: unknown): value is Child {
     && hasNonEmptyString(value, 'avatar')
     && hasNonEmptyString(value, 'grade')
     && typeof value.status === 'string' && CHILD_STATUSES.has(value.status)
-    && hasNonEmptyString(value, 'createdAt');
+    && isIsoDateString(value.createdAt);
 }
 
 function isCourse(value: unknown): value is Course {
@@ -85,8 +91,8 @@ function isCourse(value: unknown): value is Course {
     && isStringArray(cover.colors)
     && typeof value.status === 'string' && COURSE_STATUSES.has(value.status)
     && isStringArray(value.videoIds)
-    && hasNonEmptyString(value, 'createdAt')
-    && hasNonEmptyString(value, 'updatedAt');
+    && isIsoDateString(value.createdAt)
+    && isIsoDateString(value.updatedAt);
 }
 
 function isVideo(value: unknown): value is Video {
@@ -98,7 +104,7 @@ function isVideo(value: unknown): value is Video {
     && isFiniteNonNegative(value.durationSeconds)
     && typeof value.status === 'string' && VIDEO_STATUSES.has(value.status)
     && isFiniteNonNegative(value.orderIndex)
-    && hasNonEmptyString(value, 'createdAt');
+    && isIsoDateString(value.createdAt);
 }
 
 function isWatchProgress(value: unknown): value is WatchProgress {
@@ -109,7 +115,7 @@ function isWatchProgress(value: unknown): value is WatchProgress {
     && isProgress(value.maxProgress)
     && typeof value.completed === 'boolean'
     && isFiniteNonNegative(value.totalWatchSeconds)
-    && hasNonEmptyString(value, 'updatedAt');
+    && isIsoDateString(value.updatedAt);
 }
 
 function isWatchEvent(value: unknown): value is WatchEvent {
@@ -118,14 +124,14 @@ function isWatchEvent(value: unknown): value is WatchEvent {
     && hasNonEmptyString(value, 'childId')
     && hasNonEmptyString(value, 'videoId')
     && isFiniteNonNegative(value.effectiveWatchSeconds)
-    && hasNonEmptyString(value, 'occurredAt');
+    && isIsoDateString(value.occurredAt);
 }
 
 function isFavorite(value: unknown): value is Favorite {
   if (!isRecord(value)) return false;
   return hasNonEmptyString(value, 'id')
     && hasNonEmptyString(value, 'childId')
-    && hasNonEmptyString(value, 'createdAt')
+    && isIsoDateString(value.createdAt)
     && (hasNonEmptyString(value, 'courseId') || hasNonEmptyString(value, 'videoId'));
 }
 

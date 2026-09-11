@@ -2,7 +2,7 @@ import type { Course, Video, WatchEvent, WatchProgress } from '../types/domain';
 
 export const COMPLETION_THRESHOLD = 0.9;
 export const DAILY_STREAK_SECONDS = 60;
-const MAX_REASONABLE_SECONDS = Number.MAX_SAFE_INTEGER;
+export const MAX_REASONABLE_SECONDS = Number.MAX_SAFE_INTEGER;
 
 function clampFinite(value: number, minimum: number, maximum: number, fallback = minimum): number {
   if (!Number.isFinite(value)) return fallback;
@@ -28,6 +28,9 @@ export function createProgressUpdate(
   previous: WatchProgress | undefined,
   input: Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; updatedAt?: string },
 ): WatchProgress {
+  if (typeof input.isPlaying !== 'boolean') {
+    throw new TypeError('isPlaying must be a boolean');
+  }
   const progress = clampFinite(input.progress, 0, 1);
   const previousMaxProgress = clampFinite(previous?.maxProgress ?? 0, 0, 1);
   const maxProgress = Math.max(previousMaxProgress, progress);
@@ -39,7 +42,7 @@ export function createProgressUpdate(
     lastPositionSeconds: clampFinite(input.lastPositionSeconds, 0, MAX_REASONABLE_SECONDS),
     maxProgress,
     completed: maxProgress >= COMPLETION_THRESHOLD,
-    totalWatchSeconds: previousTotalWatchSeconds + (input.isPlaying ? deltaWatchSeconds : 0),
+    totalWatchSeconds: Math.min(MAX_REASONABLE_SECONDS, previousTotalWatchSeconds + (input.isPlaying ? deltaWatchSeconds : 0)),
     updatedAt: input.updatedAt ?? new Date().toISOString(),
   };
 }
