@@ -1,4 +1,6 @@
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
+import { ParentShell } from './components/ParentShell';
+import { ChildShell } from './components/ChildShell';
 
 function LandingPage() {
   return (
@@ -27,8 +29,25 @@ export default function App() {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/parent/overview" element={<RoutePlaceholder title="家长端" />} />
-        <Route path="/child/select" element={<RoutePlaceholder title="儿童端" />} />
+        <Route path="/parent" element={<ParentShell />}>
+          <Route index element={<RoutePlaceholder title="家长端概览" />} />
+          <Route path="overview" element={<RoutePlaceholder title="家长端概览" />} />
+          <Route path="courses" element={<RoutePlaceholder title="课程管理" />} />
+          <Route path="uploads" element={<RoutePlaceholder title="视频上传" />} />
+          <Route path="children" element={<RoutePlaceholder title="孩子管理" />} />
+          <Route path="records" element={<RoutePlaceholder title="学习记录" />} />
+          <Route path="settings" element={<RoutePlaceholder title="设置" />} />
+        </Route>
+        <Route path="/child" element={<ChildShell />}>
+          <Route index element={<RoutePlaceholder title="选择孩子" />} />
+          <Route path="select" element={<RoutePlaceholder title="选择孩子" />} />
+          <Route path="home" element={<RoutePlaceholder title="儿童首页" />} />
+          <Route path="courses" element={<RoutePlaceholder title="课程" />} />
+          <Route path="course/:courseId" element={<RoutePlaceholder title="课程详情" />} />
+          <Route path="watch/:videoId" element={<RoutePlaceholder title="视频播放" />} />
+          <Route path="records" element={<RoutePlaceholder title="学习记录" />} />
+          <Route path="me" element={<RoutePlaceholder title="我的" />} />
+        </Route>
         <Route path="*" element={<LandingPage />} />
       </Routes>
     </BrowserRouter>
