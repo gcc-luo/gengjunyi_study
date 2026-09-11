@@ -54,6 +54,20 @@ describe('parent management pages', () => {
     expect(screen.getAllByText('还没有学习记录')).toHaveLength(2);
   });
 
+  it('excludes inactive children from overview minutes and recent activity', () => {
+    const snapshot = emptySnapshot();
+    const today = new Date().toISOString();
+    snapshot.children = [{ id: 'inactive-only', name: '已停用', avatar: '🌙', grade: '二年级', status: 'INACTIVE', createdAt: today }];
+    snapshot.courses = [{ id: 'course-one', title: '课程', subjectId: 'math', description: '', ageRange: '6-8岁', cover: { style: 'sunrise', colors: ['#2D86F5'] }, status: CourseStatus.DRAFT, videoIds: ['video-one'], createdAt: today, updatedAt: today }];
+    snapshot.videos = [{ id: 'video-one', courseId: 'course-one', title: '停用孩子的视频', fileName: '停用.mp4', durationSeconds: 600, status: VideoStatus.READY, orderIndex: 1, createdAt: today }];
+    snapshot.watchEvents = [{ id: 'inactive-event', childId: 'inactive-only', videoId: 'video-one', effectiveWatchSeconds: 600, occurredAt: today }];
+
+    renderRoute('/parent/overview', snapshot);
+
+    expect(screen.getByTestId('metric-today')).toHaveTextContent('0');
+    expect(screen.queryByText('停用孩子的视频')).not.toBeInTheDocument();
+  });
+
   it('creates a draft course from the controlled editor', () => {
     renderRoute('/parent/courses?new=1', createSeedSnapshot());
 
@@ -146,7 +160,58 @@ describe('parent management pages', () => {
     const tasks = screen.getByText('第2课.mp4').closest('.task-list')!;
     expect(tasks.textContent?.indexOf('第2课.mp4') ?? -1).toBeLessThan(tasks.textContent?.indexOf('第10课.mp4') ?? -1);
     act(() => { vi.advanceTimersByTime(120 * 8); });
-    expect(screen.getAllByText('已完成')).toHaveLength(2);
+    expect(document.querySelectorAll('.task-status.task-completed')).toHaveLength(2);
     vi.useRealTimers();
+  });
+
+  it('keeps weekly completion fixed while range changes and shows detail progress/status', () => {
+    const snapshot = createSeedSnapshot();
+    const today = new Date();
+    const twoDaysAgo = new Date(today.getTime() - 2 * 86400000).toISOString();
+    snapshot.watchEvents = [{ id: 'completed-event', childId: 'child-gege', videoId: 'video-chinese-1', effectiveWatchSeconds: 120, occurredAt: twoDaysAgo }];
+    snapshot.watchProgress = [{ childId: 'child-gege', videoId: 'video-chinese-1', lastPositionSeconds: 260, maxProgress: 0.86, completed: false, totalWatchSeconds: 120, updatedAt: twoDaysAgo }, { childId: 'child-gege', videoId: 'video-space-1', lastPositionSeconds: 300, maxProgress: 1, completed: true, totalWatchSeconds: 300, updatedAt: twoDaysAgo }];
+    renderRoute('/parent/records?child=child-gege', snapshot);
+    expect(screen.getByText('86%')).toBeInTheDocument();
+    expect(screen.getByText('学习中')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('时间范围'), { target: { value: 'today' } });
+    expect(screen.getByText('本周完成视频')).toBeInTheDocument();
+    expect(screen.getByTestId('records-week-completed')).toHaveTextContent('1');
+    expect(screen.getByTestId('records-streak')).toHaveTextContent('0');
+  });
+
+  it('uses the global search to open courses and match video names', () => {
+    renderRoute('/parent/overview', createSeedSnapshot());
+    const search = screen.getByLabelText('搜索课程、孩子或记录');
+    fireEvent.change(search, { target: { value: '第10课' } });
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(screen.getByText('小小诗人：古诗启蒙')).toBeInTheDocument();
+    expect(screen.getByText('第10课 春晓')).toBeInTheDocument();
+  });
+
+  it('keeps valid upload files when a batch also contains an invalid file', () => {
+    vi.useFakeTimers();
+    renderRoute('/parent/uploads', createSeedSnapshot());
+    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-chinese' } });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const valid = new File(['video'], '第3课.mp4', { type: 'video/mp4' });
+    const invalid = new File(['text'], '说明.txt', { type: 'text/plain' });
+    fireEvent.change(input, { target: { files: [invalid, valid] } });
+    expect(screen.getByText('第3课.mp4')).toBeInTheDocument();
+    expect(screen.getByText(/说明.txt.*格式不支持/)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}').uploadTasks).toEqual(expect.arrayContaining([expect.objectContaining({ fileName: '第3课.mp4', status: 'QUEUED' })]));
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(document.querySelectorAll('.task-status.task-cancelled')).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('defaults free course choice on and maintains a video title from detail', () => {
+    renderRoute('/parent/settings', createSeedSnapshot());
+    expect(screen.getByLabelText('允许自由选课')).toBeChecked();
+    cleanup();
+    renderRoute('/parent/courses/course-chinese', createSeedSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: '编辑视频 第1课 静夜思' }));
+    fireEvent.change(screen.getByLabelText('视频标题'), { target: { value: '静夜思（更新版）' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存视频' }));
+    expect(screen.getByText('静夜思（更新版）')).toBeInTheDocument();
   });
 });

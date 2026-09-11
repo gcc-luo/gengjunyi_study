@@ -138,6 +138,15 @@ describe('AppStore', () => {
     expect(result.current.courses.some((course) => course.title === '需要恢复的课程')).toBe(false);
   });
 
+  it('corrects the selected child after reset when the old child no longer exists', () => {
+    const snapshot = createSeedSnapshot();
+    snapshot.children = [{ id: 'temporary-child', name: '临时孩子', avatar: '🌟', grade: '一年级', status: 'ACTIVE', createdAt: new Date().toISOString() }];
+    const { result } = renderHook(() => useAppStore(), { wrapper: ({ children }) => <AppStoreProvider initialSnapshot={snapshot}>{children}</AppStoreProvider> });
+    act(() => result.current.selectChild('temporary-child'));
+    act(() => result.current.resetSnapshot());
+    expect(result.current.currentChildId).toBe('child-gege');
+  });
+
   it('exposes accessible progress and closes modal with Escape', () => {
     render(<ProgressBar value={0.4} />);
     const progress = screen.getByRole('progressbar');

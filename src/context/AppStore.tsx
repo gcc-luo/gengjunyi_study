@@ -8,6 +8,7 @@ type VideoInput = Pick<Video, 'title' | 'fileName' | 'durationSeconds'> & Partia
 type ProgressInput = Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; updatedAt?: string };
 type ChildInput = Pick<Child, 'name' | 'avatar' | 'grade'>;
 type ChildUpdate = Partial<ChildInput> & Partial<Pick<Child, 'status'>>;
+type UploadTaskInput = Pick<UploadTask, 'courseId' | 'fileName'>;
 
 export interface AppStoreValue {
   snapshot: Snapshot;
@@ -35,6 +36,8 @@ export interface AppStoreValue {
   deactivateChild: (id: string) => Child | undefined;
   saveWatchProgress: (input: ProgressInput) => WatchProgress;
   toggleFavorite: (input: { courseId?: string; videoId?: string }) => Favorite | undefined;
+  createUploadTask: (input: UploadTaskInput) => UploadTask;
+  updateUploadTask: (id: string, input: Partial<UploadTask>) => UploadTask | undefined;
   resetSnapshot: (snapshot?: Snapshot) => void;
 }
 
@@ -90,7 +93,10 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
       return nextProgress;
     };
     const toggleFavorite = (input: { courseId?: string; videoId?: string }) => { if (!currentChildId || (!input.courseId && !input.videoId)) return undefined; const existing = snapshotRef.current.favorites.find((item) => item.childId === currentChildId && item.courseId === input.courseId && item.videoId === input.videoId); if (existing) { update((draft) => { draft.favorites = draft.favorites.filter((item) => item.id !== existing.id); }); return undefined; } const favorite: Favorite = { id: newId('favorite'), childId: currentChildId, ...input, createdAt: now() }; update((draft) => draft.favorites.push(favorite)); return favorite; };
-    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, resetSnapshot: (next?: Snapshot) => commit(next ?? resetStorage()) };
+    const createUploadTask = (input: UploadTaskInput) => { const task: UploadTask = { id: newId('upload'), courseId: input.courseId, fileName: input.fileName, progress: 0, status: 'QUEUED' }; update((draft) => draft.uploadTasks.push(task)); return task; };
+    const updateUploadTask = (id: string, input: Partial<UploadTask>) => { const task = snapshotRef.current.uploadTasks.find((item) => item.id === id); if (!task) return undefined; const next = { ...task, ...input }; update((draft) => { const index = draft.uploadTasks.findIndex((item) => item.id === id); draft.uploadTasks[index] = next; }); return next; };
+    const resetSnapshotCommand = (next?: Snapshot) => { const replacement = next ?? resetStorage(); commit(replacement); setCurrentChildId(replacement.children.find((child) => child.status === ChildStatus.ACTIVE)?.id ?? null); };
+    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, createUploadTask, updateUploadTask, resetSnapshot: resetSnapshotCommand };
   }, [snapshot, currentChildId]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
