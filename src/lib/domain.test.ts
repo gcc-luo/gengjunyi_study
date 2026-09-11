@@ -65,6 +65,34 @@ describe('learning domain rules', () => {
     expect(localStorage.getItem('unrelated')).toBe('keep');
   });
 
+  it('recovers seed when stored entity arrays contain malformed records', () => {
+    const valid = loadSnapshot();
+    const invalidSnapshots: unknown[] = [
+      { ...valid, subjects: [null] },
+      { ...valid, subjects: [{ id: 'subject-only' }] },
+      { ...valid, children: [null] },
+      { ...valid, children: [{ id: 'child-only' }] },
+      { ...valid, children: [{ ...valid.children[0], status: 'UNKNOWN' }] },
+      { ...valid, courses: [null] },
+      { ...valid, courses: [{ ...valid.courses[0], status: 'UNKNOWN' }] },
+      { ...valid, videos: [null] },
+      { ...valid, videos: [{ ...valid.videos[0], status: 'UNKNOWN' }] },
+      { ...valid, watchProgress: [{}] },
+      { ...valid, watchEvents: [{}] },
+      { ...valid, favorites: [null] },
+      { ...valid, favorites: [{}] },
+      { ...valid, uploadTasks: [null] },
+      { ...valid, uploadTasks: [{ ...valid.uploadTasks[0], status: 'UNKNOWN' }] },
+    ];
+    localStorage.setItem('unrelated', 'keep');
+
+    for (const invalid of invalidSnapshots) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(invalid));
+      expect(loadSnapshot().courses.map((item) => item.id)).toContain('course-chinese');
+    }
+    expect(localStorage.getItem('unrelated')).toBe('keep');
+  });
+
   it('sorts lesson names naturally', () => {
     expect(naturalCompare('第10课', '第2课')).toBeGreaterThan(0);
   });
