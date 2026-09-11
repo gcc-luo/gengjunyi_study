@@ -152,4 +152,50 @@ describe('AppStore', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('uses the latest snapshot across consecutive course commands', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+    let course!: Course;
+    act(() => {
+      course = result.current.createCourse({ title: '连续操作', subjectId: 'math' });
+      result.current.updateCourse(course.id, { title: '连续操作已更新' });
+      result.current.addVideo(course.id, { title: '第一课', fileName: '1.mp4', durationSeconds: 60, status: VideoStatus.READY });
+      expect(result.current.publishCourse(course.id)).toEqual({ ok: true });
+    });
+    expect(result.current.courses).toEqual(expect.arrayContaining([expect.objectContaining({ id: course.id, title: '连续操作已更新', status: CourseStatus.PUBLISHED })]));
+  });
+
+  it('uses the latest snapshot across consecutive favorite commands', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+    let first;
+    let second;
+    act(() => {
+      first = result.current.toggleFavorite({ courseId: 'course-space' });
+      second = result.current.toggleFavorite({ courseId: 'course-space' });
+    });
+    expect(first).toEqual(expect.objectContaining({ courseId: 'course-space' }));
+    expect(second).toBeUndefined();
+    expect(result.current.favorites).not.toEqual(expect.arrayContaining([expect.objectContaining({ courseId: 'course-space' })]));
+  });
+
+  it('traps Tab focus inside the modal', () => {
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.textContent = '打开';
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const onClose = vi.fn();
+    render(<Modal open title="焦点测试" onClose={onClose}><button type="button">内容</button></Modal>);
+    const dialog = screen.getByRole('dialog');
+    const close = screen.getByRole('button', { name: '关闭' });
+    const content = screen.getByRole('button', { name: '内容' });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(content);
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(close);
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalled();
+    document.body.removeChild(trigger);
+  });
 });

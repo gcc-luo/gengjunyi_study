@@ -5,8 +5,19 @@ export function Modal({ open, title, onClose, children }: { open: boolean; title
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? []).filter((element) => !element.hasAttribute('disabled'));
+    const first = () => focusable()[0] ?? dialogRef.current;
+    first()?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+      if (event.key !== 'Tab') return;
+      const elements = focusable();
+      if (!elements.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
+      const current = document.activeElement;
+      const index = elements.indexOf(current as HTMLElement);
+      if (event.shiftKey) { event.preventDefault(); elements[index <= 0 ? elements.length - 1 : index - 1].focus(); }
+      else { event.preventDefault(); elements[index === -1 || index === elements.length - 1 ? 0 : index + 1].focus(); }
+    };
     document.addEventListener('keydown', onKeyDown);
     return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus(); };
   }, [open, onClose]);
