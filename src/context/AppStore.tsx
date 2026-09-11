@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { addWatchEvent, canPublishCourse, createProgressUpdate, type PublishResult } from '../lib/domain';
-import { loadSnapshot, persistSnapshot } from '../lib/storage';
+import { loadSnapshot, persistSnapshot, resetStorage } from '../lib/storage';
 import { ChildStatus, CourseStatus, VideoStatus, type Child, type Course, type Favorite, type Snapshot, type UploadTask, type Video, type WatchEvent, type WatchProgress } from '../types/domain';
 
 type CourseInput = Partial<Pick<Course, 'description' | 'ageRange' | 'cover'>> & Pick<Course, 'title' | 'subjectId'>;
@@ -88,7 +88,7 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
       return nextProgress;
     };
     const toggleFavorite = (input: { courseId?: string; videoId?: string }) => { if (!currentChildId || (!input.courseId && !input.videoId)) return undefined; const existing = snapshot.favorites.find((item) => item.childId === currentChildId && item.courseId === input.courseId && item.videoId === input.videoId); if (existing) { update((draft) => { draft.favorites = draft.favorites.filter((item) => item.id !== existing.id); }); return undefined; } const favorite: Favorite = { id: newId('favorite'), childId: currentChildId, ...input, createdAt: now() }; update((draft) => draft.favorites.push(favorite)); return favorite; };
-    return { currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, resetSnapshot: (next = loadSnapshot()) => commit(next) };
+    return { currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, resetSnapshot: (next?: Snapshot) => commit(next ?? resetStorage()) };
   }, [snapshot, currentChildId]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;

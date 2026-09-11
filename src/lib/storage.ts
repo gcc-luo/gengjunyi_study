@@ -92,7 +92,7 @@ function isCourse(value: unknown): value is Course {
     && hasNonEmptyString(value, 'title')
     && typeof value.subjectId === 'string' && SUBJECT_IDS.has(value.subjectId)
     && typeof value.description === 'string'
-    && hasNonEmptyString(value, 'ageRange')
+    && typeof value.ageRange === 'string'
     && isRecord(cover)
     && hasNonEmptyString(cover, 'style')
     && isStringArray(cover.colors)
