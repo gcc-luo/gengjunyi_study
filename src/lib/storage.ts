@@ -53,7 +53,10 @@ function isIsoDateString(value: unknown): value is string {
 }
 
 function isFiniteNonNegative(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  return typeof value === 'number'
+    && Number.isFinite(value)
+    && value >= 0
+    && value <= Number.MAX_SAFE_INTEGER;
 }
 
 function isProgress(value: unknown): value is number {

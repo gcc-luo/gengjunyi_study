@@ -115,6 +115,28 @@ describe('learning domain rules', () => {
     expect(localStorage.getItem('unrelated')).toBe('keep');
   });
 
+  it('recovers seed for stored numbers above the safe integer limit', () => {
+    const valid = loadSnapshot();
+    const invalidSnapshots: unknown[] = [
+      { ...valid, videos: [{ ...valid.videos[0], durationSeconds: Number.MAX_SAFE_INTEGER + 1 }] },
+      { ...valid, watchProgress: [{ ...valid.watchProgress[0], totalWatchSeconds: Number.MAX_SAFE_INTEGER + 1 }] },
+    ];
+    localStorage.setItem('unrelated', 'keep');
+
+    for (const invalid of invalidSnapshots) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(invalid));
+      expect(loadSnapshot()).toEqual(valid);
+    }
+    expect(localStorage.getItem('unrelated')).toBe('keep');
+  });
+
+  it('accepts legitimate fractional video durations', () => {
+    const valid = loadSnapshot();
+    const withFractionalDuration = { ...valid, videos: [{ ...valid.videos[0], durationSeconds: 1.5 }, ...valid.videos.slice(1)] };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(withFractionalDuration));
+    expect(loadSnapshot().videos[0].durationSeconds).toBe(1.5);
+  });
+
   it('sorts lesson names naturally', () => {
     expect(naturalCompare('第10课', '第2课')).toBeGreaterThan(0);
   });
