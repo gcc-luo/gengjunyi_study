@@ -52,6 +52,19 @@ describe('learning domain rules', () => {
     expect(localStorage.getItem('unrelated')).toBe('keep');
   });
 
+  it('recovers seed for every invalid snapshot root or required array', () => {
+    const requiredArrays = ['subjects', 'children', 'courses', 'videos', 'watchProgress', 'watchEvents', 'favorites', 'uploadTasks'];
+    const invalidSnapshots: unknown[] = [null, [], ...requiredArrays.map((key) => ({ [key]: null }))];
+    localStorage.clear();
+    localStorage.setItem('unrelated', 'keep');
+
+    for (const invalid of invalidSnapshots) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(invalid));
+      expect(loadSnapshot().courses.map((item) => item.id)).toContain('course-chinese');
+    }
+    expect(localStorage.getItem('unrelated')).toBe('keep');
+  });
+
   it('sorts lesson names naturally', () => {
     expect(naturalCompare('第10课', '第2课')).toBeGreaterThan(0);
   });
@@ -69,7 +82,7 @@ describe('learning domain rules', () => {
       childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 95, maxProgress: 0.95,
       completed: true, totalWatchSeconds: 30, updatedAt: '2026-09-01T00:00:00.000Z',
     };
-    const updated = createProgressUpdate(previous, { childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 30, progress: 0.3, deltaWatchSeconds: 10 });
+    const updated = createProgressUpdate(previous, { childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 30, progress: 0.3, deltaWatchSeconds: 10, isPlaying: true });
     expect(updated.lastPositionSeconds).toBe(30);
     expect(updated.maxProgress).toBe(0.95);
     expect(updated.completed).toBe(true);
@@ -88,9 +101,34 @@ describe('learning domain rules', () => {
     expect(updated.totalWatchSeconds).toBe(30);
   });
 
+  it('clamps invalid progress and watch values without producing non-finite results', () => {
+    const previous: WatchProgress = {
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: Number.POSITIVE_INFINITY, maxProgress: Number.NaN,
+      completed: false, totalWatchSeconds: Number.POSITIVE_INFINITY, updatedAt: '2026-09-01T00:00:00.000Z',
+    };
+    const updated = createProgressUpdate(previous, {
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: -10, progress: Number.NaN,
+      deltaWatchSeconds: Number.POSITIVE_INFINITY, isPlaying: true,
+    });
+    expect(updated.lastPositionSeconds).toBe(0);
+    expect(updated.maxProgress).toBe(0);
+    expect(updated.totalWatchSeconds).toBe(0);
+    expect(Number.isFinite(updated.lastPositionSeconds)).toBe(true);
+    expect(Number.isFinite(updated.maxProgress)).toBe(true);
+    expect(Number.isFinite(updated.totalWatchSeconds)).toBe(true);
+
+    const clamped = createProgressUpdate(undefined, {
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: Number.MAX_VALUE, progress: 2,
+      deltaWatchSeconds: -10, isPlaying: true,
+    });
+    expect(clamped.lastPositionSeconds).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+    expect(clamped.maxProgress).toBe(1);
+    expect(clamped.totalWatchSeconds).toBe(0);
+  });
+
   it('marks 90 percent as completed', () => {
     expect(createProgressUpdate(undefined, {
-      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 108, progress: 0.9, deltaWatchSeconds: 0,
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 108, progress: 0.9, deltaWatchSeconds: 0, isPlaying: true,
     }).completed).toBe(true);
   });
 
@@ -124,5 +162,13 @@ describe('learning domain rules', () => {
     ];
     expect(getDailyWatchSeconds(events, 'child-1', '2026-09-10')).toBe(60);
     expect(getStreakDays(events, 'child-1', new Date('2026-09-11T12:00:00.000Z'))).toBe(2);
+  });
+
+  it('uses the ISO UTC date when aggregating events near midnight', () => {
+    const events: WatchEvent[] = [
+      { id: 'utc-boundary', childId: 'child-1', videoId: 'v1', effectiveWatchSeconds: 60, occurredAt: '2026-09-10T23:30:00.000Z' },
+    ];
+    expect(getDailyWatchSeconds(events, 'child-1', '2026-09-10')).toBe(60);
+    expect(getDailyWatchSeconds(events, 'child-1', '2026-09-11')).toBe(0);
   });
 });

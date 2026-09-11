@@ -2,6 +2,12 @@ import type { Course, Video, WatchEvent, WatchProgress } from '../types/domain';
 
 export const COMPLETION_THRESHOLD = 0.9;
 export const DAILY_STREAK_SECONDS = 60;
+const MAX_REASONABLE_SECONDS = Number.MAX_SAFE_INTEGER;
+
+function clampFinite(value: number, minimum: number, maximum: number, fallback = minimum): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, value));
+}
 
 export function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, 'zh-Hans', { numeric: true, sensitivity: 'base' });
@@ -20,27 +26,32 @@ export function canPublishCourse(course: Course, videos: Video[]): PublishResult
 
 export function createProgressUpdate(
   previous: WatchProgress | undefined,
-  input: Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying?: boolean; updatedAt?: string },
+  input: Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; updatedAt?: string },
 ): WatchProgress {
-  const maxProgress = Math.max(previous?.maxProgress ?? 0, input.progress);
+  const progress = clampFinite(input.progress, 0, 1);
+  const previousMaxProgress = clampFinite(previous?.maxProgress ?? 0, 0, 1);
+  const maxProgress = Math.max(previousMaxProgress, progress);
+  const previousTotalWatchSeconds = clampFinite(previous?.totalWatchSeconds ?? 0, 0, MAX_REASONABLE_SECONDS);
+  const deltaWatchSeconds = clampFinite(input.deltaWatchSeconds, 0, MAX_REASONABLE_SECONDS);
   return {
     childId: input.childId,
     videoId: input.videoId,
-    lastPositionSeconds: input.lastPositionSeconds,
+    lastPositionSeconds: clampFinite(input.lastPositionSeconds, 0, MAX_REASONABLE_SECONDS),
     maxProgress,
     completed: maxProgress >= COMPLETION_THRESHOLD,
-    totalWatchSeconds: (previous?.totalWatchSeconds ?? 0) + (input.isPlaying === false ? 0 : Math.max(0, input.deltaWatchSeconds)),
+    totalWatchSeconds: previousTotalWatchSeconds + (input.isPlaying ? deltaWatchSeconds : 0),
     updatedAt: input.updatedAt ?? new Date().toISOString(),
   };
 }
 
 export function addWatchEvent(events: WatchEvent[], input: { childId: string; videoId: string; isPlaying: boolean; deltaWatchSeconds: number; positionSeconds: number; occurredAt?: string }): WatchEvent[] {
-  if (!input.isPlaying || input.deltaWatchSeconds <= 0) return events;
+  const effectiveWatchSeconds = clampFinite(input.deltaWatchSeconds, 0, MAX_REASONABLE_SECONDS);
+  if (!input.isPlaying || effectiveWatchSeconds <= 0) return events;
   const event: WatchEvent = {
     id: `${input.childId}:${input.videoId}:${input.occurredAt ?? Date.now()}`,
     childId: input.childId,
     videoId: input.videoId,
-    effectiveWatchSeconds: input.deltaWatchSeconds,
+    effectiveWatchSeconds,
     occurredAt: input.occurredAt ?? new Date().toISOString(),
   };
   return [...events, event];
@@ -53,10 +64,14 @@ export function getCourseProgress(course: Course, videos: Video[], progress: Wat
   return completed / playable.length;
 }
 
+/** Event dates use the ISO UTC `YYYY-MM-DD` portion, not the browser's local date. */
 export function getDailyWatchSeconds(events: WatchEvent[], childId: string, date: string): number {
-  return events.filter((event) => event.childId === childId && event.occurredAt.slice(0, 10) === date).reduce((sum, event) => sum + event.effectiveWatchSeconds, 0);
+  return events
+    .filter((event) => event.childId === childId && event.occurredAt.slice(0, 10) === date)
+    .reduce((sum, event) => Math.min(MAX_REASONABLE_SECONDS, sum + clampFinite(event.effectiveWatchSeconds, 0, MAX_REASONABLE_SECONDS)), 0);
 }
 
+/** Streak days are evaluated using UTC calendar dates. */
 export function getStreakDays(events: WatchEvent[], childId: string, now = new Date()): number {
   let days = 0;
   const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
