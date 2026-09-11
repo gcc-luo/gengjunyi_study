@@ -2,6 +2,7 @@ import { renderHook, act } from '@testing-library/react';
 import { AppStoreProvider, useAppStore } from './AppStore';
 import { createSeedSnapshot } from '../data/seed';
 import { CourseStatus, VideoStatus, type Course, type Video } from '../types/domain';
+import { STORAGE_KEY } from '../lib/storage';
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const snapshot = createSeedSnapshot();
@@ -52,12 +53,12 @@ describe('AppStore', () => {
   it('scopes progress and events to the selected child', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     act(() => result.current.saveWatchProgress({ childId: 'child-gege', videoId: 'video-chinese-2', lastPositionSeconds: 20, progress: 0.2, deltaWatchSeconds: 10, isPlaying: true }));
+    act(() => result.current.selectChild('child-meimei'));
     act(() => result.current.saveWatchProgress({ childId: 'child-meimei', videoId: 'video-chinese-2', lastPositionSeconds: 40, progress: 0.4, deltaWatchSeconds: 10, isPlaying: true }));
 
-    expect(result.current.progress).toHaveLength(1);
-    expect(result.current.progress[0].childId).toBe('child-gege');
-    act(() => result.current.selectChild('child-meimei'));
     expect(result.current.progress).toEqual([expect.objectContaining({ childId: 'child-meimei', lastPositionSeconds: 40 })]);
+    act(() => result.current.selectChild('child-gege'));
+    expect(result.current.progress).toEqual([expect.objectContaining({ childId: 'child-gege', lastPositionSeconds: 20 })]);
   });
 
   it('updates progress by child and video without overwriting another combination', () => {
@@ -78,5 +79,29 @@ describe('AppStore', () => {
     act(() => result.current.offlineCourse('course-chinese'));
     expect(result.current.courses.find((course) => course.id === 'course-chinese')?.status).toBe(CourseStatus.OFFLINE);
     expect(result.current.watchEvents).toEqual(before);
+  });
+
+  it('rejects progress writes for a child outside the current scope', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+    act(() => result.current.selectChild('child-gege'));
+    expect(() => result.current.saveWatchProgress({ childId: 'child-meimei', videoId: 'video-chinese-2', lastPositionSeconds: 40, progress: 0.4, deltaWatchSeconds: 10, isPlaying: true })).toThrow('当前孩子');
+    expect(result.current.progress).toEqual([]);
+    expect(result.current.watchEvents).toEqual([]);
+
+    act(() => result.current.saveWatchProgress({ childId: 'child-gege', videoId: 'video-chinese-2', lastPositionSeconds: 20, progress: 0.2, deltaWatchSeconds: 10, isPlaying: true }));
+    expect(result.current.progress).toEqual([expect.objectContaining({ childId: 'child-gege', videoId: 'video-chinese-2' })]);
+    expect(result.current.watchEvents).toHaveLength(1);
+  });
+
+  it('persists course and progress commands to localStorage', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+    let course!: Course;
+    act(() => { course = result.current.createCourse({ title: '持久化课程', subjectId: 'math' }); });
+    const afterCourse = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    expect(afterCourse.courses).toEqual(expect.arrayContaining([expect.objectContaining({ id: course.id, title: '持久化课程' })]));
+
+    act(() => result.current.saveWatchProgress({ childId: 'child-gege', videoId: 'video-chinese-2', lastPositionSeconds: 20, progress: 0.2, deltaWatchSeconds: 10, isPlaying: true }));
+    const afterProgress = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    expect(afterProgress.watchProgress).toEqual(expect.arrayContaining([expect.objectContaining({ childId: 'child-gege', videoId: 'video-chinese-2' })]));
   });
 });
