@@ -160,6 +160,16 @@ export function WatchPage() {
   }, [currentChildId, flushProgress, snapshot.watchProgress, videoId, videos]);
 
   useEffect(() => {
+    durationRef.current = duration;
+    const safePosition = clampPosition(positionRef.current, duration);
+    if (safePosition !== positionRef.current) {
+      positionRef.current = safePosition;
+      setPositionSeconds(safePosition);
+      dirtyRef.current = true;
+    }
+  }, [duration, videoId]);
+
+  useEffect(() => {
     if (!isPlaying || !video) return;
     const timer = window.setInterval(() => {
       if (!isPlayingRef.current || durationRef.current <= 0) return;
@@ -261,19 +271,19 @@ export function WatchPage() {
   };
 
   if (!currentChildId) {
-    return <div className="child-page"><EmptyState title="先选择一个孩子" description="选择头像后，就能保存专属学习进度。" action={<Link className="button primary" to="/child/select">去选择孩子</Link>} /></div>;
+    return <main className="child-page"><EmptyState title="先选择一个孩子" description="选择头像后，就能保存专属学习进度。" action={<Link className="button primary" to="/child/select">去选择孩子</Link>} /></main>;
   }
   if (!video) {
-    return <div className="child-page"><EmptyState title="视频不存在" description="这个视频可能已被移除，去课程中心看看其他内容吧。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></div>;
+    return <main className="child-page"><EmptyState title="视频不存在" description="这个视频可能已被移除，去课程中心看看其他内容吧。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
   }
   if (!course) {
-    return <div className="child-page"><EmptyState title="所属课程不存在" description="暂时无法找到这个视频所属的课程。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></div>;
+    return <main className="child-page"><EmptyState title="所属课程不存在" description="暂时无法找到这个视频所属的课程。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
   }
   if (course.status !== CourseStatus.PUBLISHED) {
-    return <div className="child-page"><EmptyState title="课程已下架" description="这门课程暂时不可观看，但历史学习记录仍会保留。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></div>;
+    return <main className="child-page"><EmptyState title="课程已下架" description="这门课程暂时不可观看，但历史学习记录仍会保留。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
   }
   if (video.status !== VideoStatus.READY) {
-    return <div className="child-page"><EmptyState title="暂不可播放" description="视频还没有准备好，请稍后再试或返回课程目录。" action={<Link className="button primary" to={`/child/course/${course.id}`}>返回课程目录</Link>} /></div>;
+    return <main className="child-page"><EmptyState title="暂不可播放" description="视频还没有准备好，请稍后再试或返回课程目录。" action={<Link className="button primary" to={`/child/course/${course.id}`}>返回课程目录</Link>} /></main>;
   }
 
   const previousVideo = currentIndex > 0 ? orderedVideos[currentIndex - 1] : undefined;
@@ -282,7 +292,7 @@ export function WatchPage() {
   const percent = duration > 0 ? Math.round(positionSeconds / duration * 100) : 0;
   const syncText = lastHeartbeatAt ? new Date(lastHeartbeatAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '尚未同步';
 
-  return <div className="child-page watch-page">
+  return <main className="child-page watch-page">
     <div className="watch-topline"><button className="watch-back" type="button" onClick={handleBack}>← 返回课程</button><span className="watch-course-label">{course.title} · 第 {Math.max(1, currentIndex + 1)} 集</span><button className={`watch-favorite${isFavorite ? ' active' : ''}`} type="button" aria-pressed={isFavorite} onClick={() => toggleFavorite({ videoId: video.id })}>{isFavorite ? '★ 已收藏' : '☆ 收藏'}</button></div>
     <section className="watch-player" aria-label="演示播放器">
       <div ref={playerScreenRef} className="watch-screen" data-testid="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play" data-testid="watch-screen-play">{isPlaying ? 'Ⅱ' : '▶'}</div><span className="watch-demo-badge">演示播放</span><button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>{fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}<p>没有真实媒体地址 · 使用学习时钟体验</p></div>
@@ -294,5 +304,5 @@ export function WatchPage() {
     <section className="watch-info"><div><p className="child-kicker">正在学习 · {percent}%</p><h1>{video.title}</h1><p className="watch-sync">进度会自动保存 · 最近同步 {syncText}</p></div><div className="watch-progress-pill"><strong>{percent}%</strong><span>本集进度</span></div></section>
     <div className="watch-navigation"><button type="button" onClick={() => navigateToVideo(previousVideo)} disabled={!previousVideo}>← 上一集</button><span>{Math.max(1, currentIndex + 1)} / {orderedVideos.length}</span><button type="button" onClick={() => navigateToVideo(nextVideo)} disabled={!nextVideo}>下一集 →</button></div>
     <p className="watch-tip">看完 90% 就算完成，随时可以拖动时间轴回看。</p>
-  </div>;
+  </main>;
 }

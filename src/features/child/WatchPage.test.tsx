@@ -51,6 +51,11 @@ function RouteSwitcher() {
   return <button type="button" onClick={() => navigate('/child/watch/video-two')}>路由切到第二集</button>;
 }
 
+function DurationUpdater() {
+  const { updateVideo } = useAppStore();
+  return <button type="button" onClick={() => updateVideo('video-one', { durationSeconds: 6 })}>更新视频时长</button>;
+}
+
 function renderWatch(snapshot = watchSnapshot(), onSnapshot: (snapshot: Snapshot) => void = () => {}) {
   return render(
     <AppStoreProvider initialSnapshot={snapshot}>
@@ -221,6 +226,29 @@ describe('WatchPage playback loop', () => {
     expect(screen.getByTestId('watch-position')).toHaveTextContent('00:00');
   });
 
+  it('uses an updated duration for the same video without resetting position', () => {
+    vi.useFakeTimers();
+    let latest = watchSnapshot();
+    render(
+      <AppStoreProvider initialSnapshot={latest}>
+        <SelectChild />
+        <DurationUpdater />
+        <MemoryRouter initialEntries={['/child/watch/video-one']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Routes><Route path="/child/watch/:videoId" element={<WatchPage />} /></Routes>
+        </MemoryRouter>
+        <SnapshotProbe onSnapshot={(snapshot) => { latest = snapshot; }} />
+      </AppStoreProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(5_000));
+    fireEvent.click(screen.getByRole('button', { name: '更新视频时长' }));
+    act(() => vi.advanceTimersByTime(1_000));
+
+    expect(screen.getByTestId('watch-position')).toHaveTextContent('00:06');
+    expect(latest.watchProgress).toContainEqual(expect.objectContaining({ videoId: 'video-one', lastPositionSeconds: 6, completed: true, totalWatchSeconds: 6 }));
+  });
+
   it('does not save twice when automatic completion flushes pending watch time', () => {
     vi.useFakeTimers();
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
@@ -241,12 +269,12 @@ describe('WatchPage playback loop', () => {
     expect(screen.getByTestId('watch-screen-play')).toHaveTextContent('Ⅱ');
   });
 
-  it('keeps WatchPage out of the main landmark and reports non-ready videos consistently', () => {
+  it('keeps one main landmark and reports non-ready videos consistently', () => {
     const snapshot = watchSnapshot();
     snapshot.videos[0].status = 'UPLOADING';
     renderWatch(snapshot);
 
-    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getByText('暂不可播放')).toBeInTheDocument();
 
     cleanup();

@@ -32,6 +32,24 @@ afterEach(() => {
 });
 
 describe('child learning pages', () => {
+  it('keeps exactly one main landmark across child pages', () => {
+    renderRoute('/child/select', childSnapshot());
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('link', { name: '课程' }));
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('link', { name: /数学小探险/ }));
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('link', { name: /认识数字/ }));
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('link', { name: '我的' }));
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('link', { name: /学习记录/ }));
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+  });
+
   it('shows only active children and enters home after selecting one', () => {
     const snapshot = createSeedSnapshot();
     snapshot.children.push({ id: 'inactive-child', name: '暂时休息', avatar: '🌙', grade: '二年级', status: 'INACTIVE', createdAt: '2026-09-01T00:00:00.000Z' });
