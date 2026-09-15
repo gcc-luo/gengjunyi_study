@@ -7,6 +7,7 @@ import { createSeedSnapshot } from '../../data/seed';
 import { STORAGE_KEY } from '../../lib/storage';
 import { type Snapshot } from '../../types/domain';
 import { WatchPage } from './WatchPage';
+import { CoursePage } from './CoursePage';
 
 function watchSnapshot(): Snapshot {
   const snapshot = createSeedSnapshot();
@@ -81,6 +82,53 @@ describe('WatchPage playback loop', () => {
     expect(latest.watchProgress[0]).toMatchObject({ lastPositionSeconds: 18, maxProgress: 0.9, completed: true, totalWatchSeconds: 18 });
   });
 
+  it('flushes pending watch time before completing after a playing seek', () => {
+    vi.useFakeTimers();
+    let latest = watchSnapshot();
+    renderWatch(latest, (snapshot) => { latest = snapshot; });
+
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(5_000));
+    fireEvent.change(screen.getByRole('slider', { name: '播放进度' }), { target: { value: '18' } });
+
+    expect(latest.watchEvents).toContainEqual(expect.objectContaining({ videoId: 'video-one', effectiveWatchSeconds: 5 }));
+    expect(latest.watchProgress).toContainEqual(expect.objectContaining({ videoId: 'video-one', lastPositionSeconds: 18, completed: true, totalWatchSeconds: 5 }));
+  });
+
+  it('requests fullscreen from the player screen and degrades when unsupported', () => {
+    renderWatch();
+    const playerScreen = screen.getByTestId('watch-screen');
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(playerScreen, 'requestFullscreen', { configurable: true, value: requestFullscreen });
+
+    fireEvent.click(screen.getByRole('button', { name: '全屏' }));
+    expect(requestFullscreen).toHaveBeenCalledOnce();
+
+    cleanup();
+    renderWatch();
+    fireEvent.click(screen.getByRole('button', { name: '全屏' }));
+    expect(screen.getByRole('status')).toHaveTextContent('当前环境不支持全屏播放');
+  });
+
+  it('uses the same natural title order in the course catalog as the player', () => {
+    const snapshot = watchSnapshot();
+    snapshot.courses[0].videoIds = ['video-two', 'video-one'];
+    snapshot.videos[0].orderIndex = 20;
+    snapshot.videos[1].orderIndex = 1;
+    render(
+      <AppStoreProvider initialSnapshot={snapshot}>
+        <SelectChild />
+        <MemoryRouter initialEntries={['/child/course/course-one']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Routes><Route path="/child/course/:courseId" element={<CoursePage />} /></Routes>
+        </MemoryRouter>
+      </AppStoreProvider>,
+    );
+
+    const rows = screen.getAllByTestId(/video-row-/);
+    expect(rows[0]).toHaveTextContent('第1课 认识数字');
+    expect(rows[1]).toHaveTextContent('第2课 加法练习');
+  });
+
   it('flushes the played seconds on pause and does not accumulate while paused', () => {
     vi.useFakeTimers();
     let latest = watchSnapshot();
@@ -114,6 +162,8 @@ describe('WatchPage playback loop', () => {
   it('flushes before switching to the next lesson', () => {
     vi.useFakeTimers();
     let latest = watchSnapshot();
+    latest.videos[0].orderIndex = 20;
+    latest.videos[1].orderIndex = 1;
     renderWatch(latest, (snapshot) => { latest = snapshot; });
 
     fireEvent.click(screen.getByRole('button', { name: '播放' }));

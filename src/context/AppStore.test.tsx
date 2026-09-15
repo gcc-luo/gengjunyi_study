@@ -108,6 +108,14 @@ describe('AppStore', () => {
     expect(result.current.watchEvents).toHaveLength(1);
   });
 
+  it('caps saved progress position at the matching video duration', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+
+    act(() => result.current.saveWatchProgress({ childId: 'child-gege', videoId: 'video-chinese-2', lastPositionSeconds: 999, progress: 1, deltaWatchSeconds: 0, isPlaying: false }));
+
+    expect(result.current.progress).toEqual([expect.objectContaining({ videoId: 'video-chinese-2', lastPositionSeconds: 310 })]);
+  });
+
   it('persists course and progress commands to localStorage', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     let course!: Course;

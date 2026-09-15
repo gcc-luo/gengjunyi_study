@@ -221,6 +221,13 @@ describe('learning domain rules', () => {
     }).completed).toBe(true);
   });
 
+  it('caps saved position at the corresponding video duration', () => {
+    expect(createProgressUpdate(undefined, {
+      childId: 'child-1', videoId: 'video-1', lastPositionSeconds: 999, durationSeconds: 120,
+      progress: 1, deltaWatchSeconds: 0, isPlaying: false,
+    }).lastPositionSeconds).toBe(120);
+  });
+
   it('calculates course progress from completed playable videos', () => {
     const videos = [video('v1'), video('v2'), video('v3', 'FAILED')];
     const progress: WatchProgress[] = [

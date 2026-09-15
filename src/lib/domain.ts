@@ -26,7 +26,7 @@ export function canPublishCourse(course: Course, videos: Video[]): PublishResult
 
 export function createProgressUpdate(
   previous: WatchProgress | undefined,
-  input: Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; updatedAt?: string },
+  input: Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; durationSeconds?: number; updatedAt?: string },
 ): WatchProgress {
   if (typeof input.isPlaying !== 'boolean') {
     throw new TypeError('isPlaying must be a boolean');
@@ -36,10 +36,11 @@ export function createProgressUpdate(
   const maxProgress = Math.max(previousMaxProgress, progress);
   const previousTotalWatchSeconds = clampFinite(previous?.totalWatchSeconds ?? 0, 0, MAX_REASONABLE_SECONDS);
   const deltaWatchSeconds = clampFinite(input.deltaWatchSeconds, 0, MAX_REASONABLE_SECONDS);
+  const durationSeconds = clampFinite(input.durationSeconds ?? MAX_REASONABLE_SECONDS, 0, MAX_REASONABLE_SECONDS);
   return {
     childId: input.childId,
     videoId: input.videoId,
-    lastPositionSeconds: clampFinite(input.lastPositionSeconds, 0, MAX_REASONABLE_SECONDS),
+    lastPositionSeconds: clampFinite(input.lastPositionSeconds, 0, durationSeconds),
     maxProgress,
     completed: maxProgress >= COMPLETION_THRESHOLD,
     totalWatchSeconds: Math.min(MAX_REASONABLE_SECONDS, previousTotalWatchSeconds + (input.isPlaying ? deltaWatchSeconds : 0)),

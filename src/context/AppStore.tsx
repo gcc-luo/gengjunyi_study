@@ -90,7 +90,8 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
       if (!currentChildId) throw new Error('当前孩子未选择，不能保存学习进度');
       if (input.childId !== currentChildId) throw new Error('当前孩子与进度写入孩子不一致');
       const previous = snapshotRef.current.watchProgress.find((item) => item.childId === input.childId && item.videoId === input.videoId);
-      const nextProgress = createProgressUpdate(previous, input);
+      const video = snapshotRef.current.videos.find((item) => item.id === input.videoId);
+      const nextProgress = createProgressUpdate(previous, { ...input, durationSeconds: video?.durationSeconds });
       update((draft) => {
         const index = draft.watchProgress.findIndex((item) => item.childId === input.childId && item.videoId === input.videoId);
         if (index === -1) draft.watchProgress.push(nextProgress); else draft.watchProgress[index] = nextProgress;

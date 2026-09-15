@@ -23,7 +23,7 @@ function orderVideos(courseVideoIds: string[], videos: Video[]): Video[] {
   return courseVideoIds
     .map((id) => videos.find((video) => video.id === id))
     .filter((video): video is Video => Boolean(video && video.status === VideoStatus.READY))
-    .sort((a, b) => a.orderIndex - b.orderIndex || naturalCompare(a.title, b.title));
+    .sort((a, b) => naturalCompare(a.title, b.title) || a.orderIndex - b.orderIndex);
 }
 
 export function WatchPage() {
@@ -41,6 +41,7 @@ export function WatchPage() {
   const [positionSeconds, setPositionSeconds] = useState(() => clampPosition(initialProgress?.lastPositionSeconds ?? 0, duration));
   const [playbackRate, setPlaybackRate] = useState(1);
   const [lastHeartbeatAt, setLastHeartbeatAt] = useState(() => initialProgress ? Date.parse(initialProgress.updatedAt) || Date.now() : Date.now());
+  const [fullscreenMessage, setFullscreenMessage] = useState('');
 
   const isMountedRef = useRef(false);
   const isPlayingRef = useRef(isPlaying);
@@ -48,6 +49,7 @@ export function WatchPage() {
   const playbackRateRef = useRef(playbackRate);
   const pendingWatchSecondsRef = useRef(0);
   const dirtyRef = useRef(false);
+  const playerScreenRef = useRef<HTMLDivElement>(null);
   const videoIdRef = useRef(videoId ?? '');
   const childIdRef = useRef(currentChildId);
   const durationRef = useRef(duration);
@@ -129,18 +131,15 @@ export function WatchPage() {
       dirtyRef.current = true;
       pendingWatchSecondsRef.current += 1;
 
-      if (pendingWatchSecondsRef.current >= 10) {
-        pendingWatchSecondsRef.current -= 10;
-        persistProgress(nextPosition, 10, true, true);
-      }
-
       const completed = nextPosition >= durationRef.current || nextPosition / durationRef.current >= 0.9;
       if (completed) {
-        const remaining = pendingWatchSecondsRef.current;
-        pendingWatchSecondsRef.current = 0;
-        persistProgress(nextPosition, remaining, true, true);
+        flushProgress(true);
         isPlayingRef.current = false;
         setIsPlaying(false);
+        persistProgress(nextPosition, 0, false, true);
+      } else if (pendingWatchSecondsRef.current >= 10) {
+        pendingWatchSecondsRef.current -= 10;
+        persistProgress(nextPosition, 10, true, true);
       }
     }, 1000);
     return () => window.clearInterval(timer);
@@ -148,13 +147,15 @@ export function WatchPage() {
 
   const seekTo = (nextPosition: number) => {
     const safePosition = clampPosition(nextPosition, duration);
+    const completes = duration > 0 && (safePosition >= duration || safePosition / duration >= 0.9);
+    if (completes && isPlayingRef.current) flushProgress(true);
     positionRef.current = safePosition;
     setPositionSeconds(safePosition);
     dirtyRef.current = true;
-    if (duration > 0 && (safePosition >= duration || safePosition / duration >= 0.9)) {
+    if (completes) {
       isPlayingRef.current = false;
       setIsPlaying(false);
-      persistProgress(safePosition, pendingWatchSecondsRef.current, false, true);
+      persistProgress(safePosition, 0, false, true);
       pendingWatchSecondsRef.current = 0;
     }
   };
@@ -184,6 +185,21 @@ export function WatchPage() {
     navigate(course ? `/child/course/${course.id}` : '/child/courses');
   };
 
+  const requestFullscreen = () => {
+    const playerScreen = playerScreenRef.current;
+    if (!playerScreen || typeof playerScreen.requestFullscreen !== 'function') {
+      setFullscreenMessage('当前环境不支持全屏播放');
+      return;
+    }
+    setFullscreenMessage('');
+    try {
+      const result = playerScreen.requestFullscreen();
+      if (result && typeof result.catch === 'function') result.catch(() => setFullscreenMessage('全屏播放暂时不可用'));
+    } catch {
+      setFullscreenMessage('全屏播放暂时不可用');
+    }
+  };
+
   if (!currentChildId) {
     return <main className="child-page"><EmptyState title="先选择一个孩子" description="选择头像后，就能保存专属学习进度。" action={<Link className="button primary" to="/child/select">去选择孩子</Link>} /></main>;
   }
@@ -209,7 +225,7 @@ export function WatchPage() {
   return <main className="child-page watch-page">
     <div className="watch-topline"><button className="watch-back" type="button" onClick={handleBack}>← 返回课程</button><span className="watch-course-label">{course.title} · 第 {Math.max(1, currentIndex + 1)} 集</span><button className={`watch-favorite${isFavorite ? ' active' : ''}`} type="button" aria-pressed={isFavorite} onClick={() => toggleFavorite({ videoId: video.id })}>{isFavorite ? '★ 已收藏' : '☆ 收藏'}</button></div>
     <section className="watch-player" aria-label="演示播放器">
-      <div className="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play">{isPlaying ? '▶' : 'Ⅱ'}</div><span className="watch-demo-badge">演示播放</span><p>没有真实媒体地址 · 使用学习时钟体验</p></div>
+      <div ref={playerScreenRef} className="watch-screen" data-testid="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play">{isPlaying ? '▶' : 'Ⅱ'}</div><span className="watch-demo-badge">演示播放</span><button className="watch-fullscreen" type="button" aria-label="全屏" onClick={requestFullscreen}>⛶</button>{fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}<p>没有真实媒体地址 · 使用学习时钟体验</p></div>
       <div className="watch-controls">
         <div className="watch-time-row"><span data-testid="watch-position">{formatTime(positionSeconds)}</span><input aria-label="播放进度" type="range" min="0" max={duration} step="0.1" value={positionSeconds} onChange={(event) => seekTo(Number(event.target.value))} /><span>{formatTime(duration)}</span></div>
         <div className="watch-main-controls"><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds - 10)} aria-label="快退10秒">↶ <span>10</span></button><button className="watch-play-button" type="button" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>{isPlaying ? 'Ⅱ' : <Icon name="play" size={22} />}</button><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds + 10)} aria-label="快进10秒">↷ <span>10</span></button><label className="watch-rate">倍速<select aria-label="播放倍速" value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))}>{PLAYBACK_RATES.map((rate) => <option value={rate} key={rate}>{rate.toFixed(rate === 1 ? 1 : 2)}x</option>)}</select></label></div>
