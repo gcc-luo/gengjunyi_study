@@ -4,6 +4,7 @@ import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
 import { createSeedSnapshot } from '../../data/seed';
 import { CourseStatus, VideoStatus, type Snapshot } from '../../types/domain';
+import { EYE_CARE_STORAGE_KEY } from '../child/preferences';
 
 function renderRoute(path: string, snapshot?: Snapshot) {
   window.history.pushState({}, '', path);
@@ -161,6 +162,41 @@ describe('parent management pages', () => {
     expect(tasks.textContent?.indexOf('第2课.mp4') ?? -1).toBeLessThan(tasks.textContent?.indexOf('第10课.mp4') ?? -1);
     act(() => { vi.advanceTimersByTime(120 * 8); });
     expect(document.querySelectorAll('.task-status.task-completed')).toHaveLength(2);
+    expect(screen.getAllByRole('progressbar').every((bar) => bar.getAttribute('aria-valuenow') === '100')).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('persists 0-1 upload progress across refresh for active, failed, and cancelled tasks', () => {
+    vi.useFakeTimers();
+    renderRoute('/parent/uploads', createSeedSnapshot());
+    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-chinese' } });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [
+      new File(['video'], 'active.mp4', { type: 'video/mp4' }),
+      new File(['video'], 'complete.mp4', { type: 'video/mp4' }),
+      new File(['video'], 'fail.mp4', { type: 'video/mp4' }),
+      new File(['video'], 'cancel.mp4', { type: 'video/mp4' }),
+    ] } });
+
+    act(() => { vi.advanceTimersByTime(120); });
+    const cancelRow = screen.getByText('cancel.mp4').closest('.upload-task') as HTMLElement;
+    fireEvent.click(within(cancelRow).getByRole('button', { name: '取消' }));
+    act(() => { vi.advanceTimersByTime(120 * 7); });
+
+    const persisted = JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}');
+    expect(persisted.uploadTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fileName: 'active.mp4', status: 'COMPLETED', progress: 1 }),
+      expect.objectContaining({ fileName: 'complete.mp4', status: 'COMPLETED', progress: 1 }),
+      expect.objectContaining({ fileName: 'fail.mp4', status: 'FAILED', progress: 0.56 }),
+      expect.objectContaining({ fileName: 'cancel.mp4', status: 'CANCELLED', progress: 0.14 }),
+    ]));
+
+    cleanup();
+    window.history.pushState({}, '', '/parent/uploads');
+    render(<AppStoreProvider><App /></AppStoreProvider>);
+    expect(screen.getByText('active.mp4')).toBeInTheDocument();
+    expect(screen.getByText('fail.mp4')).toBeInTheDocument();
+    expect(screen.getByText('cancel.mp4')).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -213,6 +249,16 @@ describe('parent management pages', () => {
     fireEvent.change(screen.getByLabelText('视频标题'), { target: { value: '静夜思（更新版）' } });
     fireEvent.click(screen.getByRole('button', { name: '保存视频' }));
     expect(screen.getByText('静夜思（更新版）')).toBeInTheDocument();
+  });
+
+  it('shares the eye-care preference with the child shell', () => {
+    renderRoute('/parent/settings', createSeedSnapshot());
+    fireEvent.click(screen.getByLabelText('护眼模式'));
+    expect(localStorage.getItem(EYE_CARE_STORAGE_KEY)).toBe('true');
+
+    cleanup();
+    renderRoute('/child/select', createSeedSnapshot());
+    expect(screen.getByTestId('child-shell')).toHaveClass('eye-care');
   });
 
   it('does not add a completed upload task again after remounting', () => {

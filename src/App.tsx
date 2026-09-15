@@ -1,4 +1,4 @@
-import { BrowserRouter, Link, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { ParentShell } from './components/ParentShell';
 import { ChildShell } from './components/ChildShell';
 import { OverviewPage } from './features/parent/OverviewPage';
@@ -39,7 +39,7 @@ function RoutePlaceholder({ title }: { title: string }) {
 
 function RequireChildSelection() {
   const { currentChildId } = useAppStore();
-  return currentChildId ? <Outlet /> : <SelectChildPage />;
+  return currentChildId ? <Outlet /> : <Navigate to="/child/select" replace />;
 }
 
 export default function App() {

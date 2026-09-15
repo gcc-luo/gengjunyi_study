@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
 import { createSeedSnapshot } from '../../data/seed';
 import { CourseStatus, VideoStatus, type Snapshot } from '../../types/domain';
+import { EYE_CARE_STORAGE_KEY } from './preferences';
 
 function renderRoute(path: string, snapshot?: Snapshot) {
   window.history.pushState({}, '', path);
@@ -51,11 +52,13 @@ describe('child learning pages', () => {
 
     renderRoute('/child/home', snapshot);
     expect(screen.getByRole('heading', { name: '谁来学习？' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/child/select');
     expect(screen.queryByRole('heading', { name: '你好，小星' })).not.toBeInTheDocument();
 
     cleanup();
     renderRoute('/child/courses', snapshot);
     expect(screen.getByRole('heading', { name: '谁来学习？' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/child/select');
     expect(screen.queryByText('数学小探险')).not.toBeInTheDocument();
 
     cleanup();
@@ -80,11 +83,13 @@ describe('child learning pages', () => {
     cleanup();
     renderRoute('/child/home', snapshot);
     expect(screen.getByRole('heading', { name: '谁来学习？' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/child/select');
     expect(screen.queryByRole('heading', { name: '儿童首页' })).not.toBeInTheDocument();
 
     cleanup();
     renderRoute('/child/courses', snapshot);
     expect(screen.getByRole('heading', { name: '谁来学习？' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/child/select');
   });
 
   it('shows the current child course progress only on home', () => {
@@ -108,8 +113,12 @@ describe('child learning pages', () => {
 
     fireEvent.click(screen.getByRole('link', { name: /数学小探险/ }));
     expect(screen.getByText('课程目录')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '课程目录' })).toHaveAttribute('aria-controls', 'course-catalog-panel');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'course-catalog-panel');
     expect(screen.getByRole('link', { name: /认识数字/ })).toHaveAttribute('href', '/child/watch/ready-video');
     expect(within(screen.getByTestId('video-row-loading-video')).getByText('暂不可播放')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '课程介绍' }));
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'course-intro-panel');
   });
 
   it('persists eye-care preference and toggles the child shell class', () => {
@@ -121,8 +130,41 @@ describe('child learning pages', () => {
     expect(screen.getByTestId('child-shell')).not.toHaveClass('eye-care');
     fireEvent.click(toggle);
 
-    expect(localStorage.getItem('family-learning-app:eye-care')).toBe('true');
+    expect(localStorage.getItem(EYE_CARE_STORAGE_KEY)).toBe('true');
     expect(screen.getByTestId('child-shell')).toHaveClass('eye-care');
+
+    act(() => {
+      localStorage.setItem(EYE_CARE_STORAGE_KEY, 'false');
+      window.dispatchEvent(new StorageEvent('storage', { key: EYE_CARE_STORAGE_KEY, newValue: 'false' }));
+    });
+    expect(screen.getByTestId('child-shell')).not.toHaveClass('eye-care');
+  });
+
+  it('uses the shared free-choice preference to limit courses to learned content', () => {
+    localStorage.setItem('family-learning:free-choice', 'false');
+    renderRoute('/child/select', childSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+    fireEvent.click(screen.getByRole('link', { name: '课程' }));
+
+    expect(screen.getByText('数学小探险')).toBeInTheDocument();
+    expect(screen.queryByText('语文故事会')).not.toBeInTheDocument();
+
+    cleanup();
+    const noLearning = childSnapshot();
+    noLearning.watchProgress = [];
+    renderRoute('/child/select', noLearning);
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+    fireEvent.click(screen.getByRole('link', { name: '课程' }));
+    expect(screen.getByText('还没有找到课程')).toBeInTheDocument();
+    expect(screen.getByText('当前孩子还没有已学习的课程，请先开始一段学习。')).toBeInTheDocument();
+  });
+
+  it('shows the app version in the child profile', () => {
+    renderRoute('/child/select', childSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+    fireEvent.click(screen.getByRole('link', { name: '我的' }));
+
+    expect(screen.getByText('版本 0.1.0')).toBeInTheDocument();
   });
 
   it('keeps the parent route on the parent shell', () => {
