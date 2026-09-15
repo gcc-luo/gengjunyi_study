@@ -1,4 +1,4 @@
-import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Link, Outlet, Route, Routes } from 'react-router-dom';
 import { ParentShell } from './components/ParentShell';
 import { ChildShell } from './components/ChildShell';
 import { OverviewPage } from './features/parent/OverviewPage';
@@ -13,6 +13,7 @@ import { HomePage } from './features/child/HomePage';
 import { CoursesPage as ChildCoursesPage } from './features/child/CoursesPage';
 import { CoursePage as ChildCoursePage } from './features/child/CoursePage';
 import { MePage } from './features/child/MePage';
+import { useAppStore } from './context/AppStore';
 
 function LandingPage() {
   return (
@@ -36,6 +37,11 @@ function RoutePlaceholder({ title }: { title: string }) {
   );
 }
 
+function RequireChildSelection() {
+  const { currentChildId } = useAppStore();
+  return currentChildId ? <Outlet /> : <SelectChildPage />;
+}
+
 export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -54,12 +60,14 @@ export default function App() {
         <Route path="/child" element={<ChildShell />}>
           <Route index element={<SelectChildPage />} />
           <Route path="select" element={<SelectChildPage />} />
-          <Route path="home" element={<HomePage />} />
-          <Route path="courses" element={<ChildCoursesPage />} />
-          <Route path="course/:courseId" element={<ChildCoursePage />} />
-          <Route path="watch/:videoId" element={<RoutePlaceholder title="视频播放" />} />
-          <Route path="records" element={<RoutePlaceholder title="学习记录" />} />
-          <Route path="me" element={<MePage />} />
+          <Route element={<RequireChildSelection />}>
+            <Route path="home" element={<HomePage />} />
+            <Route path="courses" element={<ChildCoursesPage />} />
+            <Route path="course/:courseId" element={<ChildCoursePage />} />
+            <Route path="watch/:videoId" element={<RoutePlaceholder title="视频播放" />} />
+            <Route path="records" element={<RoutePlaceholder title="学习记录" />} />
+            <Route path="me" element={<MePage />} />
+          </Route>
         </Route>
         <Route path="*" element={<LandingPage />} />
       </Routes>

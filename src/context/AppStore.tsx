@@ -51,7 +51,7 @@ const now = () => new Date().toISOString();
 export function AppStoreProvider({ children, initialSnapshot }: { children: ReactNode; initialSnapshot?: Snapshot }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(() => initialSnapshot ? structuredClone(initialSnapshot) : loadSnapshot());
   const snapshotRef = useRef(snapshot);
-  const [currentChildId, setCurrentChildId] = useState<string | null>(() => snapshot.children.find((child) => child.status === ChildStatus.ACTIVE)?.id ?? null);
+  const [currentChildId, setCurrentChildId] = useState<string | null>(null);
 
   const commit = (next: Snapshot) => {
     snapshotRef.current = next;

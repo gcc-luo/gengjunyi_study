@@ -1,4 +1,5 @@
 import { fireEvent, render, renderHook, act, screen } from '@testing-library/react';
+import { useLayoutEffect, useRef } from 'react';
 import { AppStoreProvider, useAppStore } from './AppStore';
 import { createSeedSnapshot } from '../data/seed';
 import { CourseStatus, VideoStatus, type Course, type Video } from '../types/domain';
@@ -10,7 +11,19 @@ function wrapper({ children }: { children: React.ReactNode }) {
   const snapshot = createSeedSnapshot();
   snapshot.watchProgress = [];
   snapshot.watchEvents = [];
-  return <AppStoreProvider initialSnapshot={snapshot}>{children}</AppStoreProvider>;
+  return <AppStoreProvider initialSnapshot={snapshot}><SelectChildForStoreTests>{children}</SelectChildForStoreTests></AppStoreProvider>;
+}
+
+function SelectChildForStoreTests({ children }: { children: React.ReactNode }) {
+  const { selectChild } = useAppStore();
+  const selected = useRef(false);
+  useLayoutEffect(() => {
+    if (!selected.current) {
+      selected.current = true;
+      selectChild('child-gege');
+    }
+  }, []);
+  return <>{children}</>;
 }
 
 describe('AppStore', () => {
