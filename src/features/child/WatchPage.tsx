@@ -1,0 +1,222 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { EmptyState } from '../../components/EmptyState';
+import { Icon } from '../../components/Icon';
+import { useAppStore } from '../../context/AppStore';
+import { naturalCompare } from '../../lib/domain';
+import { CourseStatus, VideoStatus, type Video } from '../../types/domain';
+
+const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2];
+
+function clampPosition(value: number, duration: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(Math.max(0, value), Math.max(0, duration));
+}
+
+function formatTime(value: number): string {
+  const seconds = Math.max(0, Math.floor(value));
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function orderVideos(courseVideoIds: string[], videos: Video[]): Video[] {
+  return courseVideoIds
+    .map((id) => videos.find((video) => video.id === id))
+    .filter((video): video is Video => Boolean(video && video.status === VideoStatus.READY))
+    .sort((a, b) => a.orderIndex - b.orderIndex || naturalCompare(a.title, b.title));
+}
+
+export function WatchPage() {
+  const { videoId } = useParams();
+  const navigate = useNavigate();
+  const { currentChildId, courses, videos, snapshot, saveWatchProgress, favorites, toggleFavorite } = useAppStore();
+  const video = videos.find((item) => item.id === videoId);
+  const course = video ? courses.find((item) => item.id === video.courseId) : undefined;
+  const orderedVideos = useMemo(() => course ? orderVideos(course.videoIds, videos) : [], [course, videos]);
+  const currentIndex = video ? orderedVideos.findIndex((item) => item.id === video.id) : -1;
+  const duration = video?.durationSeconds ?? 0;
+  const initialProgress = snapshot.watchProgress.find((item) => item.childId === currentChildId && item.videoId === videoId);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [positionSeconds, setPositionSeconds] = useState(() => clampPosition(initialProgress?.lastPositionSeconds ?? 0, duration));
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [lastHeartbeatAt, setLastHeartbeatAt] = useState(() => initialProgress ? Date.parse(initialProgress.updatedAt) || Date.now() : Date.now());
+
+  const isMountedRef = useRef(false);
+  const isPlayingRef = useRef(isPlaying);
+  const positionRef = useRef(positionSeconds);
+  const playbackRateRef = useRef(playbackRate);
+  const pendingWatchSecondsRef = useRef(0);
+  const dirtyRef = useRef(false);
+  const videoIdRef = useRef(videoId ?? '');
+  const childIdRef = useRef(currentChildId);
+  const durationRef = useRef(duration);
+  const saveWatchProgressRef = useRef(saveWatchProgress);
+  const initializedRouteRef = useRef(`${currentChildId ?? ''}:${videoId ?? ''}`);
+
+  isPlayingRef.current = isPlaying;
+  positionRef.current = positionSeconds;
+  playbackRateRef.current = playbackRate;
+  durationRef.current = duration;
+  saveWatchProgressRef.current = saveWatchProgress;
+
+  const persistProgress = useCallback((position: number, deltaWatchSeconds: number, playing: boolean, force = false) => {
+    const childId = childIdRef.current;
+    const currentVideoId = videoIdRef.current;
+    const currentDuration = durationRef.current;
+    if (!childId || !currentVideoId || currentDuration <= 0 || (!force && !dirtyRef.current && deltaWatchSeconds <= 0)) return false;
+    const safePosition = clampPosition(position, currentDuration);
+    saveWatchProgressRef.current({
+      childId,
+      videoId: currentVideoId,
+      lastPositionSeconds: safePosition,
+      progress: safePosition / currentDuration,
+      deltaWatchSeconds: playing ? Math.max(0, deltaWatchSeconds) : 0,
+      isPlaying: playing,
+      updatedAt: new Date().toISOString(),
+    });
+    dirtyRef.current = false;
+    if (isMountedRef.current) setLastHeartbeatAt(Date.now());
+    return true;
+  }, []);
+
+  const flushProgress = useCallback((playing = isPlayingRef.current) => {
+    const pending = pendingWatchSecondsRef.current;
+    persistProgress(positionRef.current, pending, playing);
+    pendingWatchSecondsRef.current = 0;
+  }, [persistProgress]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      flushProgress(isPlayingRef.current);
+    };
+  }, [flushProgress]);
+
+  useEffect(() => {
+    const routeKey = `${currentChildId ?? ''}:${videoId ?? ''}`;
+    if (routeKey === initializedRouteRef.current) return;
+    if (childIdRef.current === currentChildId) flushProgress(isPlayingRef.current);
+    else {
+      pendingWatchSecondsRef.current = 0;
+      dirtyRef.current = false;
+    }
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    videoIdRef.current = videoId ?? '';
+    childIdRef.current = currentChildId;
+    const nextVideo = videos.find((item) => item.id === videoId);
+    const nextDuration = nextVideo?.durationSeconds ?? 0;
+    const nextProgress = snapshot.watchProgress.find((item) => item.childId === currentChildId && item.videoId === videoId);
+    const nextPosition = clampPosition(nextProgress?.lastPositionSeconds ?? 0, nextDuration);
+    durationRef.current = nextDuration;
+    positionRef.current = nextPosition;
+    pendingWatchSecondsRef.current = 0;
+    dirtyRef.current = false;
+    setPositionSeconds(nextPosition);
+    setLastHeartbeatAt(nextProgress ? Date.parse(nextProgress.updatedAt) || Date.now() : Date.now());
+    initializedRouteRef.current = routeKey;
+  }, [currentChildId, flushProgress, snapshot.watchProgress, videoId, videos]);
+
+  useEffect(() => {
+    if (!isPlaying || !video) return;
+    const timer = window.setInterval(() => {
+      if (!isPlayingRef.current || durationRef.current <= 0) return;
+      const nextPosition = clampPosition(positionRef.current + playbackRateRef.current, durationRef.current);
+      positionRef.current = nextPosition;
+      setPositionSeconds(nextPosition);
+      dirtyRef.current = true;
+      pendingWatchSecondsRef.current += 1;
+
+      if (pendingWatchSecondsRef.current >= 10) {
+        pendingWatchSecondsRef.current -= 10;
+        persistProgress(nextPosition, 10, true, true);
+      }
+
+      const completed = nextPosition >= durationRef.current || nextPosition / durationRef.current >= 0.9;
+      if (completed) {
+        const remaining = pendingWatchSecondsRef.current;
+        pendingWatchSecondsRef.current = 0;
+        persistProgress(nextPosition, remaining, true, true);
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, persistProgress, videoId]);
+
+  const seekTo = (nextPosition: number) => {
+    const safePosition = clampPosition(nextPosition, duration);
+    positionRef.current = safePosition;
+    setPositionSeconds(safePosition);
+    dirtyRef.current = true;
+    if (duration > 0 && (safePosition >= duration || safePosition / duration >= 0.9)) {
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      persistProgress(safePosition, pendingWatchSecondsRef.current, false, true);
+      pendingWatchSecondsRef.current = 0;
+    }
+  };
+
+  const togglePlay = () => {
+    if (!video || duration <= 0) return;
+    if (isPlayingRef.current) {
+      isPlayingRef.current = false;
+      flushProgress(true);
+      setIsPlaying(false);
+    } else {
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+    }
+  };
+
+  const navigateToVideo = (nextVideo: Video | undefined) => {
+    if (!nextVideo) return;
+    flushProgress(isPlayingRef.current);
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    navigate(`/child/watch/${nextVideo.id}`);
+  };
+
+  const handleBack = () => {
+    flushProgress(isPlayingRef.current);
+    navigate(course ? `/child/course/${course.id}` : '/child/courses');
+  };
+
+  if (!currentChildId) {
+    return <main className="child-page"><EmptyState title="先选择一个孩子" description="选择头像后，就能保存专属学习进度。" action={<Link className="button primary" to="/child/select">去选择孩子</Link>} /></main>;
+  }
+  if (!video) {
+    return <main className="child-page"><EmptyState title="视频不存在" description="这个视频可能已被移除，去课程中心看看其他内容吧。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
+  }
+  if (!course) {
+    return <main className="child-page"><EmptyState title="所属课程不存在" description="暂时无法找到这个视频所属的课程。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
+  }
+  if (course.status !== CourseStatus.PUBLISHED) {
+    return <main className="child-page"><EmptyState title="课程已下架" description="这门课程暂时不可观看，但历史学习记录仍会保留。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
+  }
+  if (video.status !== VideoStatus.READY) {
+    return <main className="child-page"><EmptyState title="视频暂不可播放" description="视频还没有准备好，请稍后再试或返回课程目录。" action={<Link className="button primary" to={`/child/course/${course.id}`}>返回课程目录</Link>} /></main>;
+  }
+
+  const previousVideo = currentIndex > 0 ? orderedVideos[currentIndex - 1] : undefined;
+  const nextVideo = currentIndex >= 0 ? orderedVideos[currentIndex + 1] : undefined;
+  const isFavorite = favorites.some((item) => item.videoId === video.id);
+  const percent = duration > 0 ? Math.round(positionSeconds / duration * 100) : 0;
+  const syncText = lastHeartbeatAt ? new Date(lastHeartbeatAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '尚未同步';
+
+  return <main className="child-page watch-page">
+    <div className="watch-topline"><button className="watch-back" type="button" onClick={handleBack}>← 返回课程</button><span className="watch-course-label">{course.title} · 第 {Math.max(1, currentIndex + 1)} 集</span><button className={`watch-favorite${isFavorite ? ' active' : ''}`} type="button" aria-pressed={isFavorite} onClick={() => toggleFavorite({ videoId: video.id })}>{isFavorite ? '★ 已收藏' : '☆ 收藏'}</button></div>
+    <section className="watch-player" aria-label="演示播放器">
+      <div className="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play">{isPlaying ? '▶' : 'Ⅱ'}</div><span className="watch-demo-badge">演示播放</span><p>没有真实媒体地址 · 使用学习时钟体验</p></div>
+      <div className="watch-controls">
+        <div className="watch-time-row"><span data-testid="watch-position">{formatTime(positionSeconds)}</span><input aria-label="播放进度" type="range" min="0" max={duration} step="0.1" value={positionSeconds} onChange={(event) => seekTo(Number(event.target.value))} /><span>{formatTime(duration)}</span></div>
+        <div className="watch-main-controls"><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds - 10)} aria-label="快退10秒">↶ <span>10</span></button><button className="watch-play-button" type="button" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>{isPlaying ? 'Ⅱ' : <Icon name="play" size={22} />}</button><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds + 10)} aria-label="快进10秒">↷ <span>10</span></button><label className="watch-rate">倍速<select aria-label="播放倍速" value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))}>{PLAYBACK_RATES.map((rate) => <option value={rate} key={rate}>{rate.toFixed(rate === 1 ? 1 : 2)}x</option>)}</select></label></div>
+      </div>
+    </section>
+    <section className="watch-info"><div><p className="child-kicker">正在学习 · {percent}%</p><h1>{video.title}</h1><p className="watch-sync">进度会自动保存 · 最近同步 {syncText}</p></div><div className="watch-progress-pill"><strong>{percent}%</strong><span>本集进度</span></div></section>
+    <div className="watch-navigation"><button type="button" onClick={() => navigateToVideo(previousVideo)} disabled={!previousVideo}>← 上一集</button><span>{Math.max(1, currentIndex + 1)} / {orderedVideos.length}</span><button type="button" onClick={() => navigateToVideo(nextVideo)} disabled={!nextVideo}>下一集 →</button></div>
+    <p className="watch-tip">看完 90% 就算完成，随时可以拖动时间轴回看。</p>
+  </main>;
+}
