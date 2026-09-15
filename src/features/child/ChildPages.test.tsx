@@ -25,6 +25,34 @@ function childSnapshot(): Snapshot {
   return snapshot;
 }
 
+function recordsSnapshot(): Snapshot {
+  const snapshot = childSnapshot();
+  const now = new Date();
+  const today = now.toISOString();
+  const yesterday = new Date(now.getTime() - 86400000).toISOString();
+  const older = new Date(now.getTime() - 9 * 86400000).toISOString();
+  snapshot.videos = [
+    { ...snapshot.videos[0], id: 'record-video-today', title: '今天的星空' },
+    { ...snapshot.videos[0], id: 'record-video-yesterday', title: '昨天的月亮' },
+    { ...snapshot.videos[0], id: 'record-video-older', title: '很久以前的太阳' },
+    { ...snapshot.videos[0], id: 'record-video-progress-only', title: '只保存进度的内容' },
+  ];
+  snapshot.watchProgress = [
+    { childId: 'child-one', videoId: 'record-video-today', lastPositionSeconds: 120, maxProgress: 1, completed: true, totalWatchSeconds: 120, updatedAt: today },
+    { childId: 'child-one', videoId: 'record-video-yesterday', lastPositionSeconds: 120, maxProgress: 1, completed: true, totalWatchSeconds: 120, updatedAt: yesterday },
+    { childId: 'child-one', videoId: 'record-video-older', lastPositionSeconds: 30, maxProgress: 0.25, completed: false, totalWatchSeconds: 30, updatedAt: older },
+    { childId: 'child-one', videoId: 'record-video-progress-only', lastPositionSeconds: 90, maxProgress: 0.75, completed: false, totalWatchSeconds: 0, updatedAt: today },
+    { childId: 'other-child', videoId: 'record-video-today', lastPositionSeconds: 120, maxProgress: 1, completed: true, totalWatchSeconds: 120, updatedAt: today },
+  ];
+  snapshot.watchEvents = [
+    { id: 'record-event-today', childId: 'child-one', videoId: 'record-video-today', effectiveWatchSeconds: 150, occurredAt: today },
+    { id: 'record-event-yesterday', childId: 'child-one', videoId: 'record-video-yesterday', effectiveWatchSeconds: 120, occurredAt: yesterday },
+    { id: 'record-event-older', childId: 'child-one', videoId: 'record-video-older', effectiveWatchSeconds: 30, occurredAt: older },
+    { id: 'record-event-other-child', childId: 'other-child', videoId: 'record-video-today', effectiveWatchSeconds: 900, occurredAt: today },
+  ];
+  return snapshot;
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
@@ -191,5 +219,41 @@ describe('child learning pages', () => {
     expect(screen.getByRole('heading', { name: '概览' })).toBeInTheDocument();
     expect(screen.queryByText('你好，哥哥')).not.toBeInTheDocument();
     expect(screen.getByTestId('metric-courses')).toBeInTheDocument();
+  });
+
+  it('aggregates records for the selected child and switches between stats and history', () => {
+    renderRoute('/child/select', recordsSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+    fireEvent.click(screen.getByRole('link', { name: '我的' }));
+    fireEvent.click(screen.getByRole('link', { name: /学习记录/ }));
+
+    expect(screen.getByRole('heading', { name: '学习记录' })).toBeInTheDocument();
+    expect(screen.getByTestId('child-records-today')).toHaveTextContent('3 分钟');
+    expect(screen.getByTestId('child-records-week')).toHaveTextContent('2');
+    expect(screen.getByTestId('child-records-streak')).toHaveTextContent('2 天');
+    expect(screen.getByRole('tab', { name: '学习统计' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('records-trend')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '学习历史' }));
+    expect(screen.getByRole('tab', { name: '学习历史' })).toHaveAttribute('aria-selected', 'true');
+    const history = screen.getByTestId('records-history');
+    expect(history).toHaveTextContent('今天的星空');
+    expect(history).toHaveTextContent('昨天的月亮');
+    expect(history).toHaveTextContent('很久以前的太阳');
+    expect(history).toHaveTextContent('只保存进度的内容');
+    expect((history.textContent ?? '').indexOf('今天的星空')).toBeLessThan((history.textContent ?? '').indexOf('昨天的月亮'));
+  });
+
+  it('shows the records empty state for a child without learning activity', () => {
+    const snapshot = childSnapshot();
+    snapshot.watchProgress = [];
+    snapshot.watchEvents = [];
+    renderRoute('/child/select', snapshot);
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+    fireEvent.click(screen.getByRole('link', { name: '我的' }));
+    fireEvent.click(screen.getByRole('link', { name: /学习记录/ }));
+
+    fireEvent.click(screen.getByRole('tab', { name: '学习历史' }));
+    expect(screen.getByText('今天从喜欢的课程开始吧')).toBeInTheDocument();
   });
 });

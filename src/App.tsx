@@ -14,6 +14,7 @@ import { CoursesPage as ChildCoursesPage } from './features/child/CoursesPage';
 import { CoursePage as ChildCoursePage } from './features/child/CoursePage';
 import { MePage } from './features/child/MePage';
 import { WatchPage } from './features/child/WatchPage';
+import { RecordsPage as ChildRecordsPage } from './features/child/RecordsPage';
 import { useAppStore } from './context/AppStore';
 
 function LandingPage() {
@@ -66,7 +67,7 @@ export default function App() {
             <Route path="courses" element={<ChildCoursesPage />} />
             <Route path="course/:courseId" element={<ChildCoursePage />} />
             <Route path="watch/:videoId" element={<WatchPage />} />
-            <Route path="records" element={<RoutePlaceholder title="学习记录" />} />
+            <Route path="records" element={<ChildRecordsPage />} />
             <Route path="me" element={<MePage />} />
           </Route>
         </Route>
