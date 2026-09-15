@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useAppStore } from '../../context/AppStore';
-import { getDailyWatchSeconds } from '../../lib/domain';
+import { getDailyWatchSeconds, getLocalDateKey } from '../../lib/domain';
 
-const dayLabel = (date: Date) => date.toLocaleDateString('zh-CN', { weekday: 'short', timeZone: 'UTC' }).replace('周', '周');
-const dateKey = (date: Date) => date.toISOString().slice(0, 10);
+const dayLabel = (date: Date) => date.toLocaleDateString('zh-CN', { weekday: 'short' }).replace('周', '周');
+const dateKey = (date: Date) => getLocalDateKey(date);
 const dateText = (iso: string) => new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 const durationText = (seconds: number) => seconds > 0 && seconds < 60 ? `${Math.round(seconds)} 秒` : `${Math.round(seconds / 60)} 分钟`;
 
@@ -16,10 +16,11 @@ export function OverviewPage() {
   const activeChildren = snapshot.children.filter((child) => child.status === 'ACTIVE');
   const activeChildIds = new Set(activeChildren.map((child) => child.id));
   const activeWatchEvents = snapshot.watchEvents.filter((event) => activeChildIds.has(event.childId));
-  const todaySeconds = activeWatchEvents.filter((event) => event.occurredAt.slice(0, 10) === today).reduce((sum, event) => sum + event.effectiveWatchSeconds, 0);
+  const todaySeconds = activeWatchEvents.filter((event) => getLocalDateKey(event.occurredAt) === today).reduce((sum, event) => sum + event.effectiveWatchSeconds, 0);
   const recentCourses = [...snapshot.courses].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4);
   const recentEvents = [...activeWatchEvents].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, 5);
-  const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setUTCDate(date.getUTCDate() - (6 - index)); return date; });
+  const now = new Date();
+  const days = Array.from({ length: 7 }, (_, index) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - index)));
   const maxDaySeconds = Math.max(60, ...days.flatMap((date) => activeChildren.map((child) => getDailyWatchSeconds(activeWatchEvents, child.id, dateKey(date)))));
   const subjectName = (id: string) => subjects.find((subject) => subject.id === id)?.name ?? id;
 

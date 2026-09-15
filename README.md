@@ -24,7 +24,8 @@ Playwright 默认以无头模式运行；需要查看浏览器时可使用 `npx 
 ## 演示流程
 
 - 家长端从 `/parent/overview` 进入概览，可创建课程、在 `/parent/uploads` 上传视频、回到 `/parent/courses` 发布或下架课程。
-- 儿童端从 `/child/select` 选择“哥哥”或“妹妹”，然后进入 `/child/home`、`/child/courses`、`/child/me` 和 `/child/records`。
+- 父端路由包括 `/parent/overview`、`/parent/courses`、`/parent/courses/:courseId`、`/parent/uploads`、`/parent/children`、`/parent/records` 和 `/parent/settings`。
+- 儿童端从 `/child/select` 选择“哥哥”或“妹妹”，然后进入 `/child/home`、`/child/courses`、`/child/course/:courseId`、`/child/watch/:videoId`、`/child/me` 和 `/child/records`。
 - `/child/records` 的学习统计和学习历史按当前选择的孩子隔离；课程下架后，儿童课程列表隐藏，但已有学习记录保留。
 - 设置页 `/parent/settings` 的“恢复演示数据”会重置当前 MVP 数据，便于重新演示。
 

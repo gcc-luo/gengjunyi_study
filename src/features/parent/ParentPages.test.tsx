@@ -237,7 +237,7 @@ describe('parent management pages', () => {
     const today = new Date();
     const twoDaysAgo = new Date(today.getTime() - 2 * 86400000).toISOString();
     snapshot.watchEvents = [{ id: 'completed-event', childId: 'child-gege', videoId: 'video-chinese-1', effectiveWatchSeconds: 120, occurredAt: twoDaysAgo }];
-    snapshot.watchProgress = [{ childId: 'child-gege', videoId: 'video-chinese-1', lastPositionSeconds: 260, maxProgress: 0.86, completed: false, totalWatchSeconds: 120, updatedAt: twoDaysAgo }, { childId: 'child-gege', videoId: 'video-space-1', lastPositionSeconds: 300, maxProgress: 1, completed: true, totalWatchSeconds: 300, updatedAt: twoDaysAgo }];
+    snapshot.watchProgress = [{ childId: 'child-gege', videoId: 'video-chinese-1', lastPositionSeconds: 260, maxProgress: 0.86, completed: false, totalWatchSeconds: 120, updatedAt: twoDaysAgo }, { childId: 'child-gege', videoId: 'video-space-1', lastPositionSeconds: 300, maxProgress: 1, completed: true, totalWatchSeconds: 300, updatedAt: today.toISOString() }];
     renderRoute('/parent/records?child=child-gege', snapshot);
     expect(screen.getByText('86%')).toBeInTheDocument();
     expect(screen.getByText('学习中')).toBeInTheDocument();

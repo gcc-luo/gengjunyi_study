@@ -7,8 +7,11 @@ import {
   createProgressUpdate,
   getCourseProgress,
   getDailyWatchSeconds,
+  getLocalDateKey,
   getStreakDays,
+  isWithinLocalWeek,
   naturalCompare,
+  startOfLocalWeek,
 } from './domain';
 import { STORAGE_KEY, loadSnapshot, resetStorage } from './storage';
 
@@ -269,11 +272,26 @@ describe('learning domain rules', () => {
     expect(getStreakDays(events, 'child-1', new Date('2026-09-11T12:00:00.000Z'))).toBe(2);
   });
 
-  it('uses the ISO UTC date when aggregating events near midnight', () => {
+  it('uses the browser local date for events near a calendar boundary', () => {
+    const localBoundary = new Date(2026, 8, 10, 0, 30);
     const events: WatchEvent[] = [
-      { id: 'utc-boundary', childId: 'child-1', videoId: 'v1', effectiveWatchSeconds: 60, occurredAt: '2026-09-10T23:30:00.000Z' },
+      { id: 'local-boundary', childId: 'child-1', videoId: 'v1', effectiveWatchSeconds: 60, occurredAt: localBoundary.toISOString() },
     ];
-    expect(getDailyWatchSeconds(events, 'child-1', '2026-09-10')).toBe(60);
-    expect(getDailyWatchSeconds(events, 'child-1', '2026-09-11')).toBe(0);
+    expect(getLocalDateKey(localBoundary)).toBe(`${localBoundary.getFullYear()}-09-10`);
+    expect(getDailyWatchSeconds(events, 'child-1', localBoundary)).toBe(60);
+    const previousDate = new Date(localBoundary);
+    previousDate.setDate(previousDate.getDate() - 1);
+    expect(getDailyWatchSeconds(events, 'child-1', previousDate)).toBe(0);
+  });
+
+  it('defines the current week as the local Monday through now', () => {
+    const reference = new Date(2026, 8, 16, 12, 0);
+    const monday = startOfLocalWeek(reference);
+    const beforeMonday = new Date(monday);
+    beforeMonday.setDate(beforeMonday.getDate() - 1);
+
+    expect(monday.getDay()).toBe(1);
+    expect(isWithinLocalWeek(new Date(monday.getTime() + 3600000), reference)).toBe(true);
+    expect(isWithinLocalWeek(beforeMonday, reference)).toBe(false);
   });
 });

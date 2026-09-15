@@ -242,17 +242,26 @@ describe('child learning pages', () => {
     expect(history).toHaveTextContent('很久以前的太阳');
     expect(history).toHaveTextContent('只保存进度的内容');
     expect((history.textContent ?? '').indexOf('今天的星空')).toBeLessThan((history.textContent ?? '').indexOf('昨天的月亮'));
+    const todayRecord = within(history).getByRole('link', { name: /回看 今天的星空/ });
+    expect(todayRecord).toHaveAttribute('href', '/child/watch/record-video-today');
+    expect(todayRecord).toHaveTextContent('已完成');
+    const progressOnlyRecord = within(history).getByRole('link', { name: /回看 只保存进度的内容/ });
+    expect(progressOnlyRecord).toHaveTextContent('学习中 · 75%');
+    expect(progressOnlyRecord).toHaveTextContent('暂无有效时长');
   });
 
   it('shows the records empty state for a child without learning activity', () => {
     const snapshot = childSnapshot();
     snapshot.watchProgress = [];
-    snapshot.watchEvents = [];
+    snapshot.watchEvents = [{ id: 'zero-event', childId: 'child-one', videoId: 'ready-video', effectiveWatchSeconds: 0, occurredAt: new Date().toISOString() }];
     renderRoute('/child/select', snapshot);
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
     fireEvent.click(screen.getByRole('link', { name: '我的' }));
     fireEvent.click(screen.getByRole('link', { name: /学习记录/ }));
 
+    expect(screen.getByText('今天从喜欢的课程开始吧')).toBeInTheDocument();
+    expect(screen.queryByTestId('child-records-today')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('records-trend')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '学习历史' }));
     expect(screen.getByText('今天从喜欢的课程开始吧')).toBeInTheDocument();
   });

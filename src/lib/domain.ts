@@ -72,19 +72,39 @@ export function getCourseProgress(course: Course, videos: Video[], progress: Wat
 }
 
 /** Event dates use the ISO UTC `YYYY-MM-DD` portion, not the browser's local date. */
-export function getDailyWatchSeconds(events: WatchEvent[], childId: string, date: string): number {
+export function getLocalDateKey(value: Date | string): string {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function startOfLocalWeek(date: Date): Date {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const mondayOffset = start.getDay() === 0 ? 6 : start.getDay() - 1;
+  start.setDate(start.getDate() - mondayOffset);
+  return start;
+}
+
+export function isWithinLocalWeek(value: Date | string, now = new Date()): boolean {
+  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp >= startOfLocalWeek(now).getTime() && timestamp <= now.getTime();
+}
+
+export function getDailyWatchSeconds(events: WatchEvent[], childId: string, date: Date | string): number {
+  const targetDate = getLocalDateKey(date);
   return events
-    .filter((event) => event.childId === childId && event.occurredAt.slice(0, 10) === date)
+    .filter((event) => event.childId === childId && getLocalDateKey(event.occurredAt) === targetDate)
     .reduce((sum, event) => Math.min(MAX_REASONABLE_SECONDS, sum + clampFinite(event.effectiveWatchSeconds, 0, MAX_REASONABLE_SECONDS)), 0);
 }
 
-/** Streak days are evaluated using UTC calendar dates. */
+/** Streak days are evaluated using the browser's local calendar dates. */
 export function getStreakDays(events: WatchEvent[], childId: string, now = new Date()): number {
   let days = 0;
-  const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  while (getDailyWatchSeconds(events, childId, cursor.toISOString().slice(0, 10)) >= DAILY_STREAK_SECONDS) {
+  const cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  while (getDailyWatchSeconds(events, childId, cursor) >= DAILY_STREAK_SECONDS) {
     days += 1;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    cursor.setDate(cursor.getDate() - 1);
   }
   return days;
 }
