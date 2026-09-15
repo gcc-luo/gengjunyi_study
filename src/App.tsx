@@ -8,6 +8,11 @@ import { UploadsPage } from './features/parent/UploadsPage';
 import { ChildrenPage } from './features/parent/ChildrenPage';
 import { RecordsPage } from './features/parent/RecordsPage';
 import { SettingsPage } from './features/parent/SettingsPage';
+import { SelectChildPage } from './features/child/SelectChildPage';
+import { HomePage } from './features/child/HomePage';
+import { CoursesPage as ChildCoursesPage } from './features/child/CoursesPage';
+import { CoursePage as ChildCoursePage } from './features/child/CoursePage';
+import { MePage } from './features/child/MePage';
 
 function LandingPage() {
   return (
@@ -47,14 +52,14 @@ export default function App() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="/child" element={<ChildShell />}>
-          <Route index element={<RoutePlaceholder title="选择孩子" />} />
-          <Route path="select" element={<RoutePlaceholder title="选择孩子" />} />
-          <Route path="home" element={<RoutePlaceholder title="儿童首页" />} />
-          <Route path="courses" element={<RoutePlaceholder title="课程" />} />
-          <Route path="course/:courseId" element={<RoutePlaceholder title="课程详情" />} />
+          <Route index element={<SelectChildPage />} />
+          <Route path="select" element={<SelectChildPage />} />
+          <Route path="home" element={<HomePage />} />
+          <Route path="courses" element={<ChildCoursesPage />} />
+          <Route path="course/:courseId" element={<ChildCoursePage />} />
           <Route path="watch/:videoId" element={<RoutePlaceholder title="视频播放" />} />
           <Route path="records" element={<RoutePlaceholder title="学习记录" />} />
-          <Route path="me" element={<RoutePlaceholder title="我的" />} />
+          <Route path="me" element={<MePage />} />
         </Route>
         <Route path="*" element={<LandingPage />} />
       </Routes>
