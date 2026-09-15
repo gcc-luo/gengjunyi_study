@@ -142,6 +142,23 @@ describe('AppStore', () => {
     expect(loaded.courses).toEqual(expect.arrayContaining([expect.objectContaining({ id: course.id, title: '无年龄草稿', ageRange: '' })]));
   });
 
+  it('clamps upload progress to finite values between zero and one', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+    let taskId = '';
+    act(() => { taskId = result.current.createUploadTask({ courseId: 'course-chinese', fileName: '安全进度.mp4' }).id; });
+
+    act(() => result.current.updateUploadTask(taskId, { progress: 2 }));
+    expect(result.current.uploadTasks.find((task) => task.id === taskId)?.progress).toBe(1);
+    act(() => result.current.updateUploadTask(taskId, { progress: -0.5 }));
+    expect(result.current.uploadTasks.find((task) => task.id === taskId)?.progress).toBe(0);
+    act(() => result.current.updateUploadTask(taskId, { progress: Number.NaN }));
+    expect(result.current.uploadTasks.find((task) => task.id === taskId)?.progress).toBe(0);
+    act(() => result.current.updateUploadTask(taskId, { progress: Number.POSITIVE_INFINITY }));
+    expect(result.current.uploadTasks.find((task) => task.id === taskId)?.progress).toBe(0);
+
+    expect(loadSnapshot().uploadTasks.find((task) => task.id === taskId)?.progress).toBe(0);
+  });
+
   it('resets to seed data by default', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     act(() => { result.current.createCourse({ title: '需要恢复的课程', subjectId: 'math' }); });

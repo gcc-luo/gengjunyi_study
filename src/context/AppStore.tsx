@@ -47,6 +47,10 @@ const AppStoreContext = createContext<AppStoreValue | undefined>(undefined);
 let idCounter = 0;
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${idCounter++}`;
 const now = () => new Date().toISOString();
+const normalizeUploadProgress = (value: unknown, fallback: number) => {
+  const safeFallback = typeof fallback === 'number' && Number.isFinite(fallback) ? Math.max(0, Math.min(1, fallback)) : 0;
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : safeFallback;
+};
 
 export function AppStoreProvider({ children, initialSnapshot }: { children: ReactNode; initialSnapshot?: Snapshot }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(() => initialSnapshot ? structuredClone(initialSnapshot) : loadSnapshot());
@@ -96,7 +100,7 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
     };
     const toggleFavorite = (input: { courseId?: string; videoId?: string }) => { if (!currentChildId || (!input.courseId && !input.videoId)) return undefined; const existing = snapshotRef.current.favorites.find((item) => item.childId === currentChildId && item.courseId === input.courseId && item.videoId === input.videoId); if (existing) { update((draft) => { draft.favorites = draft.favorites.filter((item) => item.id !== existing.id); }); return undefined; } const favorite: Favorite = { id: newId('favorite'), childId: currentChildId, ...input, createdAt: now() }; update((draft) => draft.favorites.push(favorite)); return favorite; };
     const createUploadTask = (input: UploadTaskInput) => { const task: UploadTask = { id: newId('upload'), courseId: input.courseId, fileName: input.fileName, progress: 0, status: 'QUEUED' }; update((draft) => draft.uploadTasks.push(task)); return task; };
-    const updateUploadTask = (id: string, input: Partial<UploadTask>) => { const task = snapshotRef.current.uploadTasks.find((item) => item.id === id); if (!task) return undefined; const next = { ...task, ...input }; update((draft) => { const index = draft.uploadTasks.findIndex((item) => item.id === id); draft.uploadTasks[index] = next; }); return next; };
+    const updateUploadTask = (id: string, input: Partial<UploadTask>) => { const task = snapshotRef.current.uploadTasks.find((item) => item.id === id); if (!task) return undefined; const next: UploadTask = { ...task, ...input, progress: normalizeUploadProgress(input.progress, task.progress) }; update((draft) => { const index = draft.uploadTasks.findIndex((item) => item.id === id); draft.uploadTasks[index] = next; }); return next; };
     const completeUploadTask = (id: string, input: UploadVideoInput) => {
       const current = snapshotRef.current;
       const task = current.uploadTasks.find((item) => item.id === id);

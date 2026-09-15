@@ -126,6 +126,25 @@ describe('parent management pages', () => {
     expect(screen.getByText('孩子已停用')).toBeInTheDocument();
   });
 
+  it('clears the child saved feedback timer when the page unmounts', () => {
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    try {
+      const view = renderRoute('/parent/children', createSeedSnapshot());
+      fireEvent.click(screen.getByRole('button', { name: /新增孩子/ }));
+      fireEvent.change(screen.getByLabelText('孩子昵称'), { target: { value: '小月' } });
+      fireEvent.change(screen.getByLabelText('年级'), { target: { value: '一年级' } });
+      fireEvent.click(screen.getByRole('button', { name: '保存孩子' }));
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      view.unmount();
+      expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('filters learning records and updates both summary and detail', () => {
     const snapshot = createSeedSnapshot();
     snapshot.watchEvents = [
@@ -164,6 +183,19 @@ describe('parent management pages', () => {
     expect(document.querySelectorAll('.task-status.task-completed')).toHaveLength(2);
     expect(screen.getAllByRole('progressbar').every((bar) => bar.getAttribute('aria-valuenow') === '100')).toBe(true);
     vi.useRealTimers();
+  });
+
+  it('opens the file picker from the upload drop zone with Enter and Space', () => {
+    renderRoute('/parent/uploads', createSeedSnapshot());
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, 'click');
+    const dropZone = screen.getByRole('button', { name: '选择视频文件' });
+
+    fireEvent.keyDown(dropZone, { key: 'Enter' });
+    fireEvent.keyDown(dropZone, { key: ' ' });
+
+    expect(clickSpy).toHaveBeenCalledTimes(2);
+    clickSpy.mockRestore();
   });
 
   it('persists 0-1 upload progress across refresh for active, failed, and cancelled tasks', () => {
@@ -249,6 +281,17 @@ describe('parent management pages', () => {
     fireEvent.change(screen.getByLabelText('视频标题'), { target: { value: '静夜思（更新版）' } });
     fireEvent.click(screen.getByRole('button', { name: '保存视频' }));
     expect(screen.getByText('静夜思（更新版）')).toBeInTheDocument();
+  });
+
+  it('keeps focus in the video title input while editing', () => {
+    renderRoute('/parent/courses/course-chinese', createSeedSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: '编辑视频 第1课 静夜思' }));
+    const input = screen.getByLabelText('视频标题');
+    input.focus();
+
+    fireEvent.change(input, { target: { value: '静夜思（输入中）' } });
+
+    expect(document.activeElement).toBe(input);
   });
 
   it('shares the eye-care preference with the child shell', () => {
