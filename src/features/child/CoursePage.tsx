@@ -19,7 +19,7 @@ export function CoursePage() {
   if (!course) return <main className="child-page"><EmptyState title="课程暂时找不到" description="这门课程可能已经下架，去看看其他课程吧。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
 
   const subject = subjects.find((item) => item.id === course.subjectId);
-  const orderedVideos = course.videoIds.map((id) => videos.find((video) => video.id === id)).filter((video): video is NonNullable<typeof video> => Boolean(video)).sort((a, b) => naturalCompare(a.title, b.title) || a.orderIndex - b.orderIndex);
+  const orderedVideos = course.videoIds.map((id) => videos.find((video) => video.id === id)).filter((video): video is NonNullable<typeof video> => Boolean(video)).sort((a, b) => a.orderIndex - b.orderIndex || naturalCompare(a.title, b.title));
   const progress = currentChildId ? getCourseProgress(course, videos, snapshot.watchProgress, currentChildId) : 0;
   const progressFor = (videoId: string) => snapshot.watchProgress.find((item) => item.childId === currentChildId && item.videoId === videoId);
 

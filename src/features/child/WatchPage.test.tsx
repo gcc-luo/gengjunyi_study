@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useEffect, useLayoutEffect } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppStoreProvider, useAppStore } from '../../context/AppStore';
 import { createSeedSnapshot } from '../../data/seed';
@@ -46,6 +46,11 @@ function ChildSwitcher() {
   return <><button type="button" onClick={() => selectChild('child-one')}>切换小星</button><button type="button" onClick={() => selectChild('child-two')}>切换小月</button></>;
 }
 
+function RouteSwitcher() {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate('/child/watch/video-two')}>路由切到第二集</button>;
+}
+
 function renderWatch(snapshot = watchSnapshot(), onSnapshot: (snapshot: Snapshot) => void = () => {}) {
   return render(
     <AppStoreProvider initialSnapshot={snapshot}>
@@ -61,6 +66,8 @@ function renderWatch(snapshot = watchSnapshot(), onSnapshot: (snapshot: Snapshot
 
 afterEach(() => {
   cleanup();
+  Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -108,9 +115,17 @@ describe('WatchPage playback loop', () => {
     renderWatch();
     fireEvent.click(screen.getByRole('button', { name: '全屏' }));
     expect(screen.getByRole('status')).toHaveTextContent('当前环境不支持全屏播放');
+
+    cleanup();
+    renderWatch();
+    const webkitScreen = screen.getByTestId('watch-screen');
+    const webkitRequestFullscreen = vi.fn();
+    Object.defineProperty(webkitScreen, 'webkitRequestFullscreen', { configurable: true, value: webkitRequestFullscreen });
+    fireEvent.click(screen.getByRole('button', { name: '全屏' }));
+    expect(webkitRequestFullscreen).toHaveBeenCalledOnce();
   });
 
-  it('uses the same natural title order in the course catalog as the player', () => {
+  it('uses maintained orderIndex order in the course catalog and player', () => {
     const snapshot = watchSnapshot();
     snapshot.courses[0].videoIds = ['video-two', 'video-one'];
     snapshot.videos[0].orderIndex = 20;
@@ -125,8 +140,125 @@ describe('WatchPage playback loop', () => {
     );
 
     const rows = screen.getAllByTestId(/video-row-/);
-    expect(rows[0]).toHaveTextContent('第1课 认识数字');
-    expect(rows[1]).toHaveTextContent('第2课 加法练习');
+    expect(rows[0]).toHaveTextContent('第2课 加法练习');
+    expect(rows[1]).toHaveTextContent('第1课 认识数字');
+
+    cleanup();
+    renderWatch(snapshot);
+    fireEvent.click(screen.getByRole('button', { name: /上一集/ }));
+    expect(screen.getByRole('heading', { name: '第2课 加法练习' })).toBeInTheDocument();
+  });
+
+  it('pauses and flushes when hidden, then can resume without background watch time', () => {
+    vi.useFakeTimers();
+    let latest = watchSnapshot();
+    renderWatch(latest, (snapshot) => { latest = snapshot; });
+
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(4_000));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    const hiddenProgress = latest.watchProgress[0];
+    act(() => vi.advanceTimersByTime(10_000));
+
+    expect(hiddenProgress).toMatchObject({ lastPositionSeconds: 4, totalWatchSeconds: 4 });
+    expect(latest.watchProgress[0]).toEqual(hiddenProgress);
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(screen.getByTestId('watch-position')).toHaveTextContent('00:05');
+    expect(latest.watchProgress[0]).toMatchObject({ lastPositionSeconds: 4, totalWatchSeconds: 4 });
+  });
+
+  it('removes lifecycle listeners when the player unmounts', () => {
+    const removeDocumentListener = vi.spyOn(document, 'removeEventListener');
+    const removeWindowListener = vi.spyOn(window, 'removeEventListener');
+    const view = renderWatch();
+
+    act(() => view.unmount());
+
+    expect(removeDocumentListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    expect(removeWindowListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
+    expect(removeWindowListener).toHaveBeenCalledWith('beforeunload', expect.any(Function));
+  });
+
+  it('flushes once on pagehide and beforeunload without duplicating the event', () => {
+    vi.useFakeTimers();
+    let latest = watchSnapshot();
+    renderWatch(latest, (snapshot) => { latest = snapshot; });
+
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(3_000));
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    act(() => window.dispatchEvent(new Event('beforeunload')));
+
+    expect(latest.watchProgress[0]).toMatchObject({ lastPositionSeconds: 3, totalWatchSeconds: 3 });
+    expect(latest.watchEvents).toHaveLength(1);
+  });
+
+  it('flushes the old video before a direct route videoId change', () => {
+    vi.useFakeTimers();
+    let latest = watchSnapshot();
+    latest.videos[1].durationSeconds = 2;
+    render(
+      <AppStoreProvider initialSnapshot={latest}>
+        <SelectChild />
+        <MemoryRouter initialEntries={['/child/watch/video-one']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <RouteSwitcher />
+          <Routes><Route path="/child/watch/:videoId" element={<WatchPage />} /></Routes>
+        </MemoryRouter>
+        <SnapshotProbe onSnapshot={(snapshot) => { latest = snapshot; }} />
+      </AppStoreProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(3_000));
+    fireEvent.click(screen.getByRole('button', { name: '路由切到第二集' }));
+
+    expect(latest.watchProgress).toContainEqual(expect.objectContaining({ videoId: 'video-one', lastPositionSeconds: 3, totalWatchSeconds: 3 }));
+    expect(screen.getByRole('heading', { name: '第2课 加法练习' })).toBeInTheDocument();
+    expect(screen.getByTestId('watch-position')).toHaveTextContent('00:00');
+  });
+
+  it('does not save twice when automatic completion flushes pending watch time', () => {
+    vi.useFakeTimers();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const latest = watchSnapshot();
+    latest.videos[0].durationSeconds = 10;
+    renderWatch(latest);
+
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(9_000));
+
+    expect(setItem).toHaveBeenCalledOnce();
+  });
+
+  it('shows a play icon while paused and a pause icon while playing', () => {
+    renderWatch();
+    expect(screen.getByTestId('watch-screen-play')).toHaveTextContent('▶');
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    expect(screen.getByTestId('watch-screen-play')).toHaveTextContent('Ⅱ');
+  });
+
+  it('keeps WatchPage out of the main landmark and reports non-ready videos consistently', () => {
+    const snapshot = watchSnapshot();
+    snapshot.videos[0].status = 'UPLOADING';
+    renderWatch(snapshot);
+
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    expect(screen.getByText('暂不可播放')).toBeInTheDocument();
+
+    cleanup();
+    render(
+      <AppStoreProvider initialSnapshot={snapshot}>
+        <SelectChild />
+        <MemoryRouter initialEntries={['/child/course/course-one']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Routes><Route path="/child/course/:courseId" element={<CoursePage />} /></Routes>
+        </MemoryRouter>
+      </AppStoreProvider>,
+    );
+    expect(screen.getByTestId('video-row-video-one')).toHaveTextContent('暂不可播放');
   });
 
   it('flushes the played seconds on pause and does not accumulate while paused', () => {
@@ -162,8 +294,6 @@ describe('WatchPage playback loop', () => {
   it('flushes before switching to the next lesson', () => {
     vi.useFakeTimers();
     let latest = watchSnapshot();
-    latest.videos[0].orderIndex = 20;
-    latest.videos[1].orderIndex = 1;
     renderWatch(latest, (snapshot) => { latest = snapshot; });
 
     fireEvent.click(screen.getByRole('button', { name: '播放' }));

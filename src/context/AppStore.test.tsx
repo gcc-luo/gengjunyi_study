@@ -116,6 +116,17 @@ describe('AppStore', () => {
     expect(result.current.progress).toEqual([expect.objectContaining({ videoId: 'video-chinese-2', lastPositionSeconds: 310 })]);
   });
 
+  it('does not create progress or watch events for an unknown video', () => {
+    const { result } = renderHook(() => useAppStore(), { wrapper });
+    const beforeProgress = result.current.progress;
+    const beforeEvents = result.current.watchEvents;
+
+    act(() => result.current.saveWatchProgress({ childId: 'child-gege', videoId: 'missing-video', lastPositionSeconds: 12, progress: 0.5, deltaWatchSeconds: 10, isPlaying: true }));
+
+    expect(result.current.progress).toEqual(beforeProgress);
+    expect(result.current.watchEvents).toEqual(beforeEvents);
+  });
+
   it('persists course and progress commands to localStorage', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     let course!: Course;

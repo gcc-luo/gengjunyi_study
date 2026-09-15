@@ -23,8 +23,11 @@ function orderVideos(courseVideoIds: string[], videos: Video[]): Video[] {
   return courseVideoIds
     .map((id) => videos.find((video) => video.id === id))
     .filter((video): video is Video => Boolean(video && video.status === VideoStatus.READY))
-    .sort((a, b) => naturalCompare(a.title, b.title) || a.orderIndex - b.orderIndex);
+    .sort((a, b) => a.orderIndex - b.orderIndex || naturalCompare(a.title, b.title));
 }
+
+type FullscreenElement = HTMLDivElement & { webkitRequestFullscreen?: () => void | Promise<void> };
+type FullscreenDocument = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => void | Promise<void> };
 
 export function WatchPage() {
   const { videoId } = useParams();
@@ -49,17 +52,17 @@ export function WatchPage() {
   const playbackRateRef = useRef(playbackRate);
   const pendingWatchSecondsRef = useRef(0);
   const dirtyRef = useRef(false);
-  const playerScreenRef = useRef<HTMLDivElement>(null);
+  const playerScreenRef = useRef<FullscreenElement>(null);
   const videoIdRef = useRef(videoId ?? '');
   const childIdRef = useRef(currentChildId);
   const durationRef = useRef(duration);
   const saveWatchProgressRef = useRef(saveWatchProgress);
   const initializedRouteRef = useRef(`${currentChildId ?? ''}:${videoId ?? ''}`);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   isPlayingRef.current = isPlaying;
   positionRef.current = positionSeconds;
   playbackRateRef.current = playbackRate;
-  durationRef.current = duration;
   saveWatchProgressRef.current = saveWatchProgress;
 
   const persistProgress = useCallback((position: number, deltaWatchSeconds: number, playing: boolean, force = false) => {
@@ -95,6 +98,41 @@ export function WatchPage() {
       flushProgress(isPlayingRef.current);
     };
   }, [flushProgress]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) return;
+      if (isPlayingRef.current) {
+        flushProgress(true);
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+      } else {
+        flushProgress(false);
+      }
+    };
+    const flushOnPageExit = () => flushProgress(isPlayingRef.current);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', flushOnPageExit);
+    window.addEventListener('beforeunload', flushOnPageExit);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', flushOnPageExit);
+      window.removeEventListener('beforeunload', flushOnPageExit);
+    };
+  }, [flushProgress]);
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      const fullscreenDocument = document as FullscreenDocument;
+      setIsFullscreen(fullscreenDocument.fullscreenElement === playerScreenRef.current || fullscreenDocument.webkitFullscreenElement === playerScreenRef.current);
+    };
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+      document.removeEventListener('webkitfullscreenchange', syncFullscreenState);
+    };
+  }, []);
 
   useEffect(() => {
     const routeKey = `${currentChildId ?? ''}:${videoId ?? ''}`;
@@ -136,7 +174,6 @@ export function WatchPage() {
         flushProgress(true);
         isPlayingRef.current = false;
         setIsPlaying(false);
-        persistProgress(nextPosition, 0, false, true);
       } else if (pendingWatchSecondsRef.current >= 10) {
         pendingWatchSecondsRef.current -= 10;
         persistProgress(nextPosition, 10, true, true);
@@ -148,15 +185,14 @@ export function WatchPage() {
   const seekTo = (nextPosition: number) => {
     const safePosition = clampPosition(nextPosition, duration);
     const completes = duration > 0 && (safePosition >= duration || safePosition / duration >= 0.9);
-    if (completes && isPlayingRef.current) flushProgress(true);
     positionRef.current = safePosition;
     setPositionSeconds(safePosition);
     dirtyRef.current = true;
     if (completes) {
+      persistProgress(safePosition, pendingWatchSecondsRef.current, isPlayingRef.current, true);
+      pendingWatchSecondsRef.current = 0;
       isPlayingRef.current = false;
       setIsPlaying(false);
-      persistProgress(safePosition, 0, false, true);
-      pendingWatchSecondsRef.current = 0;
     }
   };
 
@@ -187,33 +223,57 @@ export function WatchPage() {
 
   const requestFullscreen = () => {
     const playerScreen = playerScreenRef.current;
-    if (!playerScreen || typeof playerScreen.requestFullscreen !== 'function') {
+    const fullscreenDocument = document as FullscreenDocument;
+    if (isFullscreen) {
+      const exitFullscreen = fullscreenDocument.exitFullscreen ?? fullscreenDocument.webkitExitFullscreen;
+      if (!exitFullscreen) {
+        setIsFullscreen(false);
+        return;
+      }
+      try {
+        const result = exitFullscreen.call(fullscreenDocument);
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          void (result as Promise<void>).then(() => setIsFullscreen(false), () => setFullscreenMessage('退出全屏暂时不可用'));
+        } else {
+          setIsFullscreen(false);
+        }
+      } catch {
+        setFullscreenMessage('退出全屏暂时不可用');
+      }
+      return;
+    }
+    const enterFullscreen = playerScreen?.requestFullscreen ?? playerScreen?.webkitRequestFullscreen;
+    if (!playerScreen || !enterFullscreen) {
       setFullscreenMessage('当前环境不支持全屏播放');
       return;
     }
     setFullscreenMessage('');
     try {
-      const result = playerScreen.requestFullscreen();
-      if (result && typeof result.catch === 'function') result.catch(() => setFullscreenMessage('全屏播放暂时不可用'));
+      const result = enterFullscreen.call(playerScreen);
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        void (result as Promise<void>).then(() => setIsFullscreen(true), () => setFullscreenMessage('全屏播放暂时不可用'));
+      } else {
+        setIsFullscreen(true);
+      }
     } catch {
       setFullscreenMessage('全屏播放暂时不可用');
     }
   };
 
   if (!currentChildId) {
-    return <main className="child-page"><EmptyState title="先选择一个孩子" description="选择头像后，就能保存专属学习进度。" action={<Link className="button primary" to="/child/select">去选择孩子</Link>} /></main>;
+    return <div className="child-page"><EmptyState title="先选择一个孩子" description="选择头像后，就能保存专属学习进度。" action={<Link className="button primary" to="/child/select">去选择孩子</Link>} /></div>;
   }
   if (!video) {
-    return <main className="child-page"><EmptyState title="视频不存在" description="这个视频可能已被移除，去课程中心看看其他内容吧。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
+    return <div className="child-page"><EmptyState title="视频不存在" description="这个视频可能已被移除，去课程中心看看其他内容吧。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></div>;
   }
   if (!course) {
-    return <main className="child-page"><EmptyState title="所属课程不存在" description="暂时无法找到这个视频所属的课程。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
+    return <div className="child-page"><EmptyState title="所属课程不存在" description="暂时无法找到这个视频所属的课程。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></div>;
   }
   if (course.status !== CourseStatus.PUBLISHED) {
-    return <main className="child-page"><EmptyState title="课程已下架" description="这门课程暂时不可观看，但历史学习记录仍会保留。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></main>;
+    return <div className="child-page"><EmptyState title="课程已下架" description="这门课程暂时不可观看，但历史学习记录仍会保留。" action={<Link className="button primary" to="/child/courses">返回课程</Link>} /></div>;
   }
   if (video.status !== VideoStatus.READY) {
-    return <main className="child-page"><EmptyState title="视频暂不可播放" description="视频还没有准备好，请稍后再试或返回课程目录。" action={<Link className="button primary" to={`/child/course/${course.id}`}>返回课程目录</Link>} /></main>;
+    return <div className="child-page"><EmptyState title="暂不可播放" description="视频还没有准备好，请稍后再试或返回课程目录。" action={<Link className="button primary" to={`/child/course/${course.id}`}>返回课程目录</Link>} /></div>;
   }
 
   const previousVideo = currentIndex > 0 ? orderedVideos[currentIndex - 1] : undefined;
@@ -222,10 +282,10 @@ export function WatchPage() {
   const percent = duration > 0 ? Math.round(positionSeconds / duration * 100) : 0;
   const syncText = lastHeartbeatAt ? new Date(lastHeartbeatAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '尚未同步';
 
-  return <main className="child-page watch-page">
+  return <div className="child-page watch-page">
     <div className="watch-topline"><button className="watch-back" type="button" onClick={handleBack}>← 返回课程</button><span className="watch-course-label">{course.title} · 第 {Math.max(1, currentIndex + 1)} 集</span><button className={`watch-favorite${isFavorite ? ' active' : ''}`} type="button" aria-pressed={isFavorite} onClick={() => toggleFavorite({ videoId: video.id })}>{isFavorite ? '★ 已收藏' : '☆ 收藏'}</button></div>
     <section className="watch-player" aria-label="演示播放器">
-      <div ref={playerScreenRef} className="watch-screen" data-testid="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play">{isPlaying ? '▶' : 'Ⅱ'}</div><span className="watch-demo-badge">演示播放</span><button className="watch-fullscreen" type="button" aria-label="全屏" onClick={requestFullscreen}>⛶</button>{fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}<p>没有真实媒体地址 · 使用学习时钟体验</p></div>
+      <div ref={playerScreenRef} className="watch-screen" data-testid="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play" data-testid="watch-screen-play">{isPlaying ? 'Ⅱ' : '▶'}</div><span className="watch-demo-badge">演示播放</span><button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>{fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}<p>没有真实媒体地址 · 使用学习时钟体验</p></div>
       <div className="watch-controls">
         <div className="watch-time-row"><span data-testid="watch-position">{formatTime(positionSeconds)}</span><input aria-label="播放进度" type="range" min="0" max={duration} step="0.1" value={positionSeconds} onChange={(event) => seekTo(Number(event.target.value))} /><span>{formatTime(duration)}</span></div>
         <div className="watch-main-controls"><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds - 10)} aria-label="快退10秒">↶ <span>10</span></button><button className="watch-play-button" type="button" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>{isPlaying ? 'Ⅱ' : <Icon name="play" size={22} />}</button><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds + 10)} aria-label="快进10秒">↷ <span>10</span></button><label className="watch-rate">倍速<select aria-label="播放倍速" value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))}>{PLAYBACK_RATES.map((rate) => <option value={rate} key={rate}>{rate.toFixed(rate === 1 ? 1 : 2)}x</option>)}</select></label></div>
@@ -234,5 +294,5 @@ export function WatchPage() {
     <section className="watch-info"><div><p className="child-kicker">正在学习 · {percent}%</p><h1>{video.title}</h1><p className="watch-sync">进度会自动保存 · 最近同步 {syncText}</p></div><div className="watch-progress-pill"><strong>{percent}%</strong><span>本集进度</span></div></section>
     <div className="watch-navigation"><button type="button" onClick={() => navigateToVideo(previousVideo)} disabled={!previousVideo}>← 上一集</button><span>{Math.max(1, currentIndex + 1)} / {orderedVideos.length}</span><button type="button" onClick={() => navigateToVideo(nextVideo)} disabled={!nextVideo}>下一集 →</button></div>
     <p className="watch-tip">看完 90% 就算完成，随时可以拖动时间轴回看。</p>
-  </main>;
+  </div>;
 }

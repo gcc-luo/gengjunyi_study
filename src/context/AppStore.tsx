@@ -35,7 +35,7 @@ export interface AppStoreValue {
   createChild: (input: ChildInput) => Child;
   updateChild: (id: string, input: ChildUpdate) => Child | undefined;
   deactivateChild: (id: string) => Child | undefined;
-  saveWatchProgress: (input: ProgressInput) => WatchProgress;
+  saveWatchProgress: (input: ProgressInput) => WatchProgress | undefined;
   toggleFavorite: (input: { courseId?: string; videoId?: string }) => Favorite | undefined;
   createUploadTask: (input: UploadTaskInput) => UploadTask;
   updateUploadTask: (id: string, input: Partial<UploadTask>) => UploadTask | undefined;
@@ -89,9 +89,10 @@ export function AppStoreProvider({ children, initialSnapshot }: { children: Reac
     const saveWatchProgress = (input: ProgressInput) => {
       if (!currentChildId) throw new Error('当前孩子未选择，不能保存学习进度');
       if (input.childId !== currentChildId) throw new Error('当前孩子与进度写入孩子不一致');
-      const previous = snapshotRef.current.watchProgress.find((item) => item.childId === input.childId && item.videoId === input.videoId);
       const video = snapshotRef.current.videos.find((item) => item.id === input.videoId);
-      const nextProgress = createProgressUpdate(previous, { ...input, durationSeconds: video?.durationSeconds });
+      if (!video) return undefined;
+      const previous = snapshotRef.current.watchProgress.find((item) => item.childId === input.childId && item.videoId === input.videoId);
+      const nextProgress = createProgressUpdate(previous, { ...input, durationSeconds: video.durationSeconds });
       update((draft) => {
         const index = draft.watchProgress.findIndex((item) => item.childId === input.childId && item.videoId === input.videoId);
         if (index === -1) draft.watchProgress.push(nextProgress); else draft.watchProgress[index] = nextProgress;
