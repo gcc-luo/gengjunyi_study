@@ -47,6 +47,8 @@ export const parentHeaders = {
 export type ChildRecord = {
   id: string;
   name: string;
+  avatar: string;
+  grade: string;
   status: "ACTIVE" | "DISABLED";
   createdAt: Date;
   updatedAt: Date;
@@ -57,6 +59,8 @@ export type CourseRecord = {
   subjectId: string;
   title: string;
   description: string | null;
+  ageRange: string;
+  coverStyle: string;
   status: "DRAFT" | "PUBLISHED" | "UNPUBLISHED";
   createdAt: Date;
   updatedAt: Date;
@@ -105,6 +109,8 @@ const now = new Date("2026-09-17T00:00:00.000Z");
 export const activeChild: ChildRecord = {
   id: "child-1",
   name: "Mina",
+  avatar: "🌟",
+  grade: "",
   status: "ACTIVE",
   createdAt: now,
   updatedAt: now,
@@ -118,6 +124,8 @@ export function courseRecord(overrides: Partial<CourseRecord> = {}): CourseRecor
     subjectId: mathSubject.id,
     title: "Number Adventure",
     description: "Learn numbers",
+    ageRange: "",
+    coverStyle: "sunrise",
     status: "DRAFT",
     createdAt: now,
     updatedAt: now,
@@ -264,16 +272,17 @@ export function makePrisma(options: {
       }),
     },
     video: {
+      findUnique: vi.fn(async ({ where }: any) => state.videos.find((video) => video.id === where.id) ?? null),
       findMany: vi.fn(async ({ where, orderBy }: any = {}) => state.videos
         .filter((video) => !where?.courseId || video.courseId === where.courseId)
         .filter((video) => !where?.status || video.status === where.status)
         .filter((video) => !where?.id?.in || where.id.in.includes(video.id))
         .sort((a, b) => a.sortOrder - b.sortOrder)),
-      update: vi.fn(async ({ where, data }: any) => {
+      update: vi.fn(async ({ where, data, select }: any) => {
         const video = state.videos.find((candidate) => candidate.id === where.id);
         if (!video) throw new Error("Video not found");
         Object.assign(video, data, { updatedAt: now });
-        return video;
+        return select ? Object.fromEntries(Object.keys(select).filter((key) => select[key]).map((key) => [key, (video as any)[key]])) : video;
       }),
     },
     watchProgress: {

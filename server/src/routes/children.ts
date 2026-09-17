@@ -3,15 +3,23 @@ import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import {
   createChild,
+  activateChild,
   deactivateChild,
   listChildren,
   updateChild,
 } from "../services/children.js";
 
 const childIdParamsSchema = z.object({ id: z.string().min(1).max(128) });
-const createChildSchema = z.object({ name: z.string().trim().min(1).max(80) });
-const updateChildSchema = z.object({ name: z.string().trim().min(1).max(80) }).partial()
-  .refine((value) => Object.keys(value).length > 0);
+const createChildSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  avatar: z.string().trim().min(1).max(16).default("🌟"),
+  grade: z.string().trim().max(80).default(""),
+});
+const updateChildSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  avatar: z.string().trim().min(1).max(16).optional(),
+  grade: z.string().trim().max(80).optional(),
+}).refine((value) => Object.keys(value).length > 0);
 
 function errorResponse(code: string, message: string) {
   return { error: { code, message } };
@@ -31,7 +39,7 @@ export function registerChildrenRoutes(app: FastifyInstance, prisma: PrismaClien
     if (!parsed.success) {
       return reply.code(400).send(errorResponse("BAD_REQUEST", "A non-empty child name is required"));
     }
-    return reply.code(201).send(await createChild(prisma, parsed.data.name));
+    return reply.code(201).send(await createChild(prisma, parsed.data));
   });
 
   app.patch("/api/children/:id", { preHandler: app.requireParent }, async (request, reply) => {
@@ -41,7 +49,7 @@ export function registerChildrenRoutes(app: FastifyInstance, prisma: PrismaClien
       return reply.code(400).send(errorResponse("BAD_REQUEST", "Child update is invalid"));
     }
 
-    const updated = await updateChild(prisma, params.data.id, body.data.name!);
+    const updated = await updateChild(prisma, params.data.id, body.data);
     if (!updated) return notFound(reply);
     return reply.send(updated);
   });
@@ -55,5 +63,16 @@ export function registerChildrenRoutes(app: FastifyInstance, prisma: PrismaClien
     const deactivated = await deactivateChild(prisma, params.data.id);
     if (!deactivated) return notFound(reply);
     return reply.send(deactivated);
+  });
+
+  app.post("/api/children/:id/activate", { preHandler: app.requireParent }, async (request, reply) => {
+    const params = childIdParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.code(400).send(errorResponse("BAD_REQUEST", "Child ID is invalid"));
+    }
+
+    const activated = await activateChild(prisma, params.data.id);
+    if (!activated) return notFound(reply);
+    return reply.send(activated);
   });
 }

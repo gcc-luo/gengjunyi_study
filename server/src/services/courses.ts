@@ -42,10 +42,19 @@ const publishCourseInclude = {
   subject: { select: { slug: true } },
 } satisfies Prisma.CourseInclude;
 
+const coverColors: Record<string, string[]> = {
+  sunrise: ["#2D86F5", "#9ED8FF"],
+  mountain: ["#37A7E8", "#B5ECFF"],
+  planet: ["#7F6CF4", "#C4BFFF"],
+  rainbow: ["#FF6C66", "#FFD5D2"],
+};
+
 type CourseDtoSource = {
   id: string;
   title: string;
   description: string | null;
+  ageRange: string;
+  coverStyle: string;
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -71,6 +80,8 @@ function toCourseDto(course: CourseDtoSource) {
     subjectId: course.subject?.slug ?? null,
     subject: course.subject ? { slug: course.subject.slug, ...(course.subject.name ? { name: course.subject.name } : {}) } : null,
     description: course.description,
+    ageRange: course.ageRange,
+    cover: { style: course.coverStyle, colors: coverColors[course.coverStyle] ?? coverColors.sunrise },
     status: course.status,
     createdAt: course.createdAt,
     updatedAt: course.updatedAt,
@@ -133,7 +144,7 @@ export async function getCourse(prisma: PrismaClient, id: string) {
 
 export async function createCourse(
   prisma: PrismaClient,
-  input: { title: string; subjectId: string; description?: string | null },
+  input: { title: string; subjectId: string; description?: string | null; ageRange?: string; coverStyle?: string },
 ) {
   const subject = await prisma.subject.findUnique({
     where: { slug: input.subjectId },
@@ -146,6 +157,8 @@ export async function createCourse(
       title: input.title,
       subjectId: subject.id,
       description: input.description ?? null,
+      ageRange: input.ageRange ?? "",
+      coverStyle: input.coverStyle ?? "sunrise",
       status: "DRAFT",
     },
     include: courseInclude,
@@ -166,6 +179,8 @@ export function updateCourse(
     title?: string;
     subjectId?: string;
     description?: string | null;
+    ageRange?: string;
+    coverStyle?: string;
     videoIds?: string[];
   },
 ): Promise<UpdateCourseResult> {
@@ -173,9 +188,11 @@ export function updateCourse(
     const current = await transaction.course.findUnique({ where: { id }, select: { id: true } });
     if (!current) return { kind: "not-found" };
 
-    const data: { title?: string; subjectId?: string; description?: string | null } = {};
+    const data: { title?: string; subjectId?: string; description?: string | null; ageRange?: string; coverStyle?: string } = {};
     if (input.title !== undefined) data.title = input.title;
     if (input.description !== undefined) data.description = input.description;
+    if (input.ageRange !== undefined) data.ageRange = input.ageRange;
+    if (input.coverStyle !== undefined) data.coverStyle = input.coverStyle;
     if (input.subjectId !== undefined) {
       const subject = await transaction.subject.findUnique({
         where: { slug: input.subjectId },

@@ -29,6 +29,23 @@ describe("parent child routes", () => {
     expect(response.json()).toMatchObject({ name: "Mina", status: "ACTIVE" });
   });
 
+  it("persists the child's avatar and grade across reads", async () => {
+    const { prisma } = makePrisma();
+    const app = useRouteApp(prisma);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/children",
+      headers: parentHeaders,
+      payload: { name: "Mina", avatar: "🚀", grade: "小学一年级" },
+    });
+    const listed = await app.inject({ method: "GET", url: "/api/children", headers: parentHeaders });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({ avatar: "🚀", grade: "小学一年级" });
+    expect(listed.json()).toEqual([expect.objectContaining({ avatar: "🚀", grade: "小学一年级" })]);
+  });
+
   it("rejects an empty nickname", async () => {
     const { prisma } = makePrisma();
     const app = useRouteApp(prisma);
@@ -60,6 +77,21 @@ describe("parent child routes", () => {
     expect(state.children[0].status).toBe("ACTIVE");
   });
 
+  it("updates the child's avatar and grade", async () => {
+    const { prisma, state } = makePrisma({ children: [activeChild] });
+    const app = useRouteApp(prisma);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/children/child-1",
+      headers: parentHeaders,
+      payload: { avatar: "🐳", grade: "二年级" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(state.children[0]).toMatchObject({ avatar: "🐳", grade: "二年级" });
+  });
+
   it("deactivates a child, clears active selections, and preserves learning history", async () => {
     const { prisma, state } = makePrisma({
       children: [activeChild],
@@ -89,6 +121,17 @@ describe("parent child routes", () => {
     expect(state.progress).toHaveLength(1);
     expect(state.events).toHaveLength(1);
     expect(state.favorites).toHaveLength(1);
+  });
+
+  it("reactivates a disabled child without changing learning history", async () => {
+    const { prisma, state } = makePrisma({ children: [{ ...activeChild, status: "DISABLED" }], progress: [{ childId: activeChild.id, videoId: "video-1" }] });
+    const app = useRouteApp(prisma);
+
+    const response = await app.inject({ method: "POST", url: "/api/children/child-1/activate", headers: parentHeaders });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ id: "child-1", status: "ACTIVE" });
+    expect(state.progress).toHaveLength(1);
   });
 
   it("does not reveal whether an unknown child exists", async () => {

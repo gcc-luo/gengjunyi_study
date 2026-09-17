@@ -167,6 +167,22 @@ describe("PostgreSQL learning schema constraints", () => {
     }
   });
 
+  it("persists child profile and course presentation fields", async () => {
+    const fixture = await createFixture();
+    try {
+      await prisma.child.update({ where: { id: fixture.childId }, data: { avatar: "🚀", grade: "小学一年级" } });
+      await prisma.course.update({ where: { id: fixture.courseId }, data: { ageRange: "6-8岁", coverStyle: "planet" } });
+      const [child, course] = await Promise.all([
+        prisma.child.findUnique({ where: { id: fixture.childId } }),
+        prisma.course.findUnique({ where: { id: fixture.courseId } }),
+      ]);
+      expect(child).toMatchObject({ avatar: "🚀", grade: "小学一年级" });
+      expect(course).toMatchObject({ ageRange: "6-8岁", coverStyle: "planet" });
+    } finally {
+      await cleanupFixture(fixture);
+    }
+  });
+
   it("cleans all candidate videos before deleting fixture parents", async () => {
     const fixture = await createFixture();
     const candidateVideoId = randomUUID();

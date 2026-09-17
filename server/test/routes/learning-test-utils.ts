@@ -39,7 +39,7 @@ export function makeLearningHarness(options: {
     course: options.course ?? learningCourse,
     video: options.video ?? learningVideo,
     progress: [...(options.progress ?? [])],
-    events: [...(options.events ?? [])],
+    events: (options.events ?? []).map((event) => ({ eventType: "PROGRESS", positionMs: null, watchedSeconds: 0, occurredAt: new Date(), ...event })),
     favorites: [...(options.favorites ?? [])],
   };
   const adminUser = { id: "admin-1", email: "parent@example.com" };
@@ -61,6 +61,12 @@ export function makeLearningHarness(options: {
       const value = actual[key]?.getTime?.();
       return value !== undefined && (!expected.gte || value >= expected.gte.getTime()) && (!expected.lt || value < expected.lt.getTime());
     }
+    if (typeof expected === "object" && expected !== null && "in" in expected) {
+      return expected.in.includes(actual[key]);
+    }
+    if (typeof expected === "object" && expected !== null && "gte" in expected) {
+      return actual[key] >= expected.gte;
+    }
     return actual[key] === expected;
   });
   const client: any = {
@@ -74,6 +80,7 @@ export function makeLearningHarness(options: {
       update: vi.fn(async ({ data }: any) => Object.assign(session, data)),
     },
     child: {
+      findUnique: vi.fn(async ({ where }: any) => state.children.find((child) => child.id === where.id) ?? null),
       findFirst: vi.fn(async ({ where }: any) => state.children.find((child) => matches(child, where)) ?? null),
       findMany: vi.fn(async ({ where }: any = {}) => state.children.filter((child) => matches(child, where))),
       count: vi.fn(async ({ where }: any = {}) => state.children.filter((child) => matches(child, where)).length),
@@ -121,10 +128,20 @@ export function makeLearningHarness(options: {
         state.events.push(event);
         return event;
       }),
-      findMany: vi.fn(async ({ where, orderBy, take }: any = {}) => {
+      findMany: vi.fn(async ({ where, orderBy, take, skip }: any = {}) => {
         let result = state.events.filter((item) => matches(item, where));
-        if (orderBy?.occurredAt === "desc") result = result.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
-        return typeof take === "number" ? result.slice(0, take) : result;
+        const firstOrder = Array.isArray(orderBy) ? orderBy[0] : orderBy;
+        if (firstOrder?.occurredAt === "desc") result = result.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+        if (typeof skip === "number") result = result.slice(skip);
+        result = typeof take === "number" ? result.slice(0, take) : result;
+        return result.map((event) => ({
+          ...event,
+          child: state.children.find((item) => item.id === event.childId),
+          video: {
+            ...state.video,
+            course: { ...state.course, subject: state.course.subject },
+          },
+        }));
       }),
       aggregate: vi.fn(async ({ where }: any = {}) => ({
         _sum: { watchedSeconds: state.events.filter((item) => matches(item, where)).reduce((sum, item) => sum + item.watchedSeconds, 0) },

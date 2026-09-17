@@ -15,11 +15,15 @@ const createCourseSchema = z.object({
   title: z.string().trim().max(200).default(""),
   subjectId: z.string().trim().min(1).max(64),
   description: z.string().max(5000).nullable().optional(),
+  ageRange: z.string().trim().max(80).default(""),
+  coverStyle: z.enum(["sunrise", "mountain", "planet", "rainbow"]).default("sunrise"),
 });
 const updateCourseSchema = z.object({
   title: z.string().trim().max(200).optional(),
   subjectId: z.string().trim().min(1).max(64).optional(),
   description: z.string().max(5000).nullable().optional(),
+  ageRange: z.string().trim().max(80).optional(),
+  coverStyle: z.enum(["sunrise", "mountain", "planet", "rainbow"]).optional(),
   videoIds: z.array(z.string().min(1).max(128)).max(500).optional(),
 }).refine((value) => Object.keys(value).length > 0);
 

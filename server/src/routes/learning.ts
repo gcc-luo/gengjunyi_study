@@ -74,6 +74,11 @@ function localDateParts(date: Date, timeZone: string) {
   return { year: value("year"), month: value("month"), day: value("day") };
 }
 
+function localDateKey(date: Date, timeZone: string) {
+  const parts = localDateParts(date, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
 function zonedMidnightUtc(year: number, month: number, day: number, timeZone: string): Date {
   const wantedUtc = Date.UTC(year, month - 1, day);
   let candidate = wantedUtc;
@@ -346,6 +351,19 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
       maxProgressPercent: progress.maxProgressPercent,
       updatedAt: progress.updatedAt,
     })));
+    const dailyActivity = await Promise.all(Array.from({ length: 7 }, async (_, index) => {
+      const daysAgo = 6 - index;
+      const startsAt = localDayStart(now, timeZone, daysAgo);
+      const endsAt = localDayStart(now, timeZone, daysAgo - 1);
+      const aggregate = await prisma.watchEvent.aggregate({
+        where: eventWhere(activeChildId, startsAt, endsAt),
+        _sum: { watchedSeconds: true },
+      });
+      return {
+        date: localDateKey(startsAt, timeZone),
+        watchedSeconds: aggregate._sum.watchedSeconds ?? 0,
+      };
+    }));
     return reply.send({
       totals: {
         children,
@@ -356,6 +374,7 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
       },
       today: { watchedSeconds: todayWatchTime._sum.watchedSeconds ?? 0, events: todayEvents },
       week: { watchedSeconds: weekWatchTime._sum.watchedSeconds ?? 0, startsAt: thisWeekStart },
+      dailyActivity,
       recentActivity,
       continueLearning,
     });

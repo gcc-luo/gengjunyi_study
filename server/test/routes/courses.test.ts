@@ -29,13 +29,15 @@ describe("parent and child course routes", () => {
       method: "POST",
       url: "/api/courses",
       headers: parentHeaders,
-      payload: { title: "Numbers", subjectId: "math", description: "Count together" },
+      payload: { title: "Numbers", subjectId: "math", description: "Count together", ageRange: "6-8岁", coverStyle: "planet" },
     });
 
     expect(response.statusCode).toBe(201);
     expect(response.json()).toMatchObject({
       title: "Numbers",
       subjectId: "math",
+      ageRange: "6-8岁",
+      cover: { style: "planet", colors: ["#7F6CF4", "#C4BFFF"] },
       status: "DRAFT",
     });
     expect(JSON.stringify(response.json())).not.toContain(mathSubject.id);
@@ -54,13 +56,15 @@ describe("parent and child course routes", () => {
       method: "PATCH",
       url: "/api/courses/course-1",
       headers: parentHeaders,
-      payload: { title: "Numbers and Addition", subjectId: "science", videoIds: ["video-2", "video-1"] },
+      payload: { title: "Numbers and Addition", subjectId: "science", ageRange: "7-9岁", coverStyle: "rainbow", videoIds: ["video-2", "video-1"] },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       title: "Numbers and Addition",
       subjectId: "science",
+      ageRange: "7-9岁",
+      cover: { style: "rainbow", colors: ["#FF6C66", "#FFD5D2"] },
       videos: [{ id: "video-2", sortOrder: 0 }, { id: "video-1", sortOrder: 1 }],
     });
     expect(state.courses[0].subjectId).toBe(scienceSubject.id);

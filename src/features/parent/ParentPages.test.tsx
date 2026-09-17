@@ -6,6 +6,7 @@ import { AuthProvider, type AuthSession } from '../../context/AuthProvider';
 import { createSeedSnapshot } from '../../data/seed';
 import { CourseStatus, VideoStatus, type Snapshot } from '../../types/domain';
 import { EYE_CARE_STORAGE_KEY } from '../child/preferences';
+import { loadSnapshot } from '../../lib/storage';
 
 const testSession: AuthSession = { authenticated: true, admin: { id: 'admin-1', email: 'parent@example.com' }, activeChildId: null, activeChild: null, csrfToken: 'test-csrf' };
 
@@ -83,7 +84,7 @@ describe('parent management pages', () => {
     expect(within(screen.getByText('新的数学课').closest('tr')!).getByText('草稿')).toBeInTheDocument();
   });
 
-  it('shows the publish validation reason when no READY video exists', () => {
+  it('shows the publish validation reason when no READY video exists', async () => {
     const snapshot = createSeedSnapshot();
     snapshot.courses = [];
     snapshot.videos = [];
@@ -93,7 +94,7 @@ describe('parent management pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存课程' }));
     fireEvent.click(screen.getByRole('button', { name: '发布' }));
 
-    expect(screen.getByText('课程至少需要一个可播放视频')).toBeInTheDocument();
+    expect(await screen.findByText('课程至少需要一个可播放视频')).toBeInTheDocument();
   });
 
   it('naturally sorts videos and moves a video up in course detail', () => {
@@ -115,7 +116,7 @@ describe('parent management pages', () => {
     expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent('第10课');
   });
 
-  it('adds a child and deactivates it after confirmation', () => {
+  it('adds a child and deactivates it after confirmation', async () => {
     renderRoute('/parent/children', createSeedSnapshot());
     fireEvent.click(screen.getByRole('button', { name: /新增孩子/ }));
     fireEvent.change(screen.getByLabelText('孩子昵称'), { target: { value: '小月' } });
@@ -126,10 +127,10 @@ describe('parent management pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '停用 小月' }));
     expect(screen.getByText('停用后儿童端将隐藏该孩子，但历史记录会保留。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认停用' }));
-    expect(screen.getByText('孩子已停用')).toBeInTheDocument();
+    expect(await screen.findByText('孩子已停用')).toBeInTheDocument();
   });
 
-  it('clears the child saved feedback timer when the page unmounts', () => {
+  it('clears the child saved feedback timer when the page unmounts', async () => {
     vi.useFakeTimers();
     const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
     try {
@@ -138,6 +139,7 @@ describe('parent management pages', () => {
       fireEvent.change(screen.getByLabelText('孩子昵称'), { target: { value: '小月' } });
       fireEvent.change(screen.getByLabelText('年级'), { target: { value: '一年级' } });
       fireEvent.click(screen.getByRole('button', { name: '保存孩子' }));
+      await act(async () => { await Promise.resolve(); });
       expect(vi.getTimerCount()).toBeGreaterThan(0);
 
       view.unmount();
@@ -162,11 +164,10 @@ describe('parent management pages', () => {
     expect(screen.queryByText('认识太阳')).not.toBeInTheDocument();
   });
 
-  it('resets data from settings and reports feedback', () => {
+  it('reports that storage is managed by the server instead of browser demo data', () => {
     renderRoute('/parent/settings', createSeedSnapshot());
-    fireEvent.click(screen.getByRole('button', { name: '恢复演示数据' }));
-    expect(screen.getByText('演示数据已恢复')).toBeInTheDocument();
-    expect(screen.getByTestId('storage-size')).toHaveTextContent('KB');
+    expect(screen.queryByRole('button', { name: '恢复演示数据' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('storage-size')).toHaveTextContent('服务器管理');
   });
 
   it('validates upload formats, naturally orders tasks, and completes independently', () => {
@@ -228,7 +229,7 @@ describe('parent management pages', () => {
 
     cleanup();
     window.history.pushState({}, '', '/parent/uploads');
-    render(<AuthProvider initialSession={testSession}><AppStoreProvider><App /></AppStoreProvider></AuthProvider>);
+    render(<AuthProvider initialSession={testSession}><AppStoreProvider initialSnapshot={loadSnapshot()}><App /></AppStoreProvider></AuthProvider>);
     expect(screen.getByText('active.mp4')).toBeInTheDocument();
     expect(screen.getByText('fail.mp4')).toBeInTheDocument();
     expect(screen.getByText('cancel.mp4')).toBeInTheDocument();
@@ -315,7 +316,7 @@ describe('parent management pages', () => {
     cleanup();
 
     window.history.pushState({}, '', '/parent/uploads');
-    render(<AuthProvider initialSession={testSession}><AppStoreProvider><App /></AppStoreProvider></AuthProvider>);
+    render(<AuthProvider initialSession={testSession}><AppStoreProvider initialSnapshot={loadSnapshot()}><App /></AppStoreProvider></AuthProvider>);
     const persisted = JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}');
     expect(persisted.videos.filter((video: { courseId: string; fileName: string }) => video.courseId === 'course-chinese' && video.fileName === '第99课.mp4')).toHaveLength(1);
   });

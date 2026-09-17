@@ -60,6 +60,8 @@ model Session {
 model Child {
   id            String          @id @default(cuid())
   name          String
+  avatar        String          @default("🌟")
+  grade         String          @default("")
   status        ChildStatus     @default(ACTIVE)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
@@ -85,6 +87,8 @@ model Course {
   subjectId   String
   title       String
   description String?
+  ageRange    String       @default("")
+  coverStyle  String       @default("sunrise")
   status      CourseStatus @default(DRAFT)
   createdAt   DateTime     @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
