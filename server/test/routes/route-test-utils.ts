@@ -29,6 +29,7 @@ export const config: AppConfig = {
     accessKey: "test-access-key",
     secretKey: "test-secret-key",
     bucket: "family-learning-videos",
+    publicUrl: "http://localhost:19000",
   },
   appOrigin: "http://localhost:5173",
   appTimezone: "Asia/Shanghai",

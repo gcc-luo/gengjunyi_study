@@ -8,6 +8,12 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerChildrenRoutes } from "./routes/children.js";
 import { registerCourseRoutes } from "./routes/courses.js";
 import { registerChildContentRoutes } from "./routes/child-content.js";
+import { registerUploadRoutes } from "./routes/uploads.js";
+import { registerStorageRoutes } from "./routes/storage.js";
+import { registerVideoManagementRoutes } from "./routes/videos.js";
+import { MinioStorage, type MediaStorage } from "./storage/minio.js";
+import { validateMediaUrl, type MediaValidationResult } from "./services/media-validation.js";
+import { expireOldUploads } from "./services/uploads.js";
 import type { PrismaClient } from "./generated/prisma/client.js";
 
 function stripQueryString(url: string): string {
@@ -19,13 +25,19 @@ export function buildApp({
   config,
   loggerStream,
   prisma: injectedPrisma,
+  storage: injectedStorage,
+  validateMedia = validateMediaUrl,
 }: {
   config: AppConfig;
   loggerStream?: { write(message: string): void };
   prisma?: PrismaClient;
+  storage?: MediaStorage;
+  validateMedia?: (url: string) => Promise<MediaValidationResult>;
 }): FastifyInstance {
   const prisma = injectedPrisma ?? createPrismaClient(config.databaseUrl);
   const ownsPrisma = injectedPrisma === undefined;
+  const storage = injectedStorage ?? new MinioStorage(config.minio);
+  const ownsStorage = injectedStorage === undefined;
   const app = Fastify({
     trustProxy: config.trustedProxies,
     logger: {
@@ -67,6 +79,11 @@ export function buildApp({
     registerCourseRoutes(parentScope, prisma);
     registerChildContentRoutes(parentScope, prisma);
   });
+  void app.register(async (parentScope) => {
+    registerUploadRoutes(parentScope, prisma, storage, validateMedia);
+    registerStorageRoutes(parentScope, prisma);
+    registerVideoManagementRoutes(parentScope, prisma, storage);
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     const candidateStatusCode =
@@ -93,7 +110,16 @@ export function buildApp({
     }),
   );
 
+  const uploadCleanupTimer = setInterval(() => {
+    void expireOldUploads(prisma, storage).catch(() => {
+      app.log.error("Expired upload cleanup failed");
+    });
+  }, 60 * 60 * 1000);
+  uploadCleanupTimer.unref();
+
   app.addHook("onClose", async () => {
+    clearInterval(uploadCleanupTimer);
+    if (ownsStorage) storage.close();
     if (ownsPrisma) await prisma.$disconnect();
   });
 

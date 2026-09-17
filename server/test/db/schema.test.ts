@@ -2,6 +2,7 @@ import { PrismaClient } from "../../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import { cancelUpload, createUpload } from "../../src/services/uploads";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -353,6 +354,26 @@ describe("PostgreSQL learning schema constraints", () => {
     }
   });
 
+  it("persists a readable media validation failure reason", async () => {
+    const fixture = await createFixture();
+
+    try {
+      await prisma.video.update({
+        where: { id: fixture.videoId },
+        data: { status: "FAILED", failureReason: "The video must use H.264 encoding" },
+      });
+
+      await expect(
+        prisma.video.findUnique({ where: { id: fixture.videoId } }),
+      ).resolves.toMatchObject({
+        status: "FAILED",
+        failureReason: "The video must use H.264 encoding",
+      });
+    } finally {
+      await cleanupFixture(fixture);
+    }
+  });
+
   it("rejects negative video byte sizes and durations", async () => {
     const fixture = await createFixture();
 
@@ -456,6 +477,63 @@ describe("PostgreSQL learning schema constraints", () => {
           reservedBytes: BigInt(0),
         },
       });
+    }
+  });
+
+  it("serializes concurrent upload reservations against the singleton quota row", async () => {
+    const id = randomUUID();
+    const subjectId = randomUUID();
+    const courseId = randomUUID();
+    const videoIds: string[] = [];
+    let uploadIdToCancel: string | undefined;
+    const storage = {
+      createMultipartUpload: async () => randomUUID(),
+      abortMultipartUpload: async () => undefined,
+    } as any;
+
+    try {
+      await prisma.subject.create({ data: { id: subjectId, name: `Quota ${id}`, slug: `quota-${id}` } });
+      await prisma.course.create({
+        data: { id: courseId, subjectId, title: `Quota ${id}`, status: "DRAFT" },
+      });
+      const quota = await prisma.storageQuota.findUnique({ where: { id: 1 } });
+      expect(quota).toMatchObject({ usedBytes: 0n, reservedBytes: 0n });
+
+      const results = await Promise.allSettled([
+        createUpload(prisma, storage, { courseId, fileName: "first.mp4", sizeBytes: 60_000_000_000 }),
+        createUpload(prisma, storage, { courseId, fileName: "second.mp4", sizeBytes: 60_000_000_000 }),
+      ]);
+      const fulfilled = results.filter((result) => result.status === "fulfilled");
+      const rejected = results.filter((result) => result.status === "rejected");
+
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: "quota-exceeded" });
+      const accepted = (fulfilled[0] as PromiseFulfilledResult<Awaited<ReturnType<typeof createUpload>>>).value;
+      uploadIdToCancel = accepted.uploadId;
+      const session = await prisma.uploadSession.findUnique({ where: { id: accepted.uploadId } });
+      if (session?.videoId) videoIds.push(session.videoId);
+
+      expect(await prisma.storageQuota.findUnique({ where: { id: 1 } })).toMatchObject({
+        usedBytes: 0n,
+        reservedBytes: 60_000_000_000n,
+      });
+      await cancelUpload(prisma, storage, accepted.uploadId);
+      uploadIdToCancel = undefined;
+      expect(await prisma.storageQuota.findUnique({ where: { id: 1 } })).toMatchObject({
+        usedBytes: 0n,
+        reservedBytes: 0n,
+      });
+    } finally {
+      if (uploadIdToCancel) {
+        await cancelUpload(prisma, storage, uploadIdToCancel).catch(() => undefined);
+      }
+      const courseVideos = await prisma.video.findMany({ where: { courseId }, select: { id: true } });
+      const allVideoIds = [...videoIds, ...courseVideos.map((video) => video.id)];
+      await prisma.uploadSession.deleteMany({ where: { videoId: { in: allVideoIds } } });
+      await prisma.video.deleteMany({ where: { id: { in: allVideoIds } } });
+      await prisma.course.deleteMany({ where: { id: courseId } });
+      await prisma.subject.deleteMany({ where: { id: subjectId } });
     }
   });
 

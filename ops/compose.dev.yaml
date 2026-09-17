@@ -24,6 +24,9 @@ services:
       MINIO_ROOT_USER: family_test_access
       MINIO_ROOT_PASSWORD: family_test_secret_local
       MINIO_BUCKET: family-learning-mvp-test
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:5173
+      MINIO_API_STALE_UPLOADS_EXPIRY: 168h
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 6h
     ports:
       - "127.0.0.1:19000:9000"
       - "127.0.0.1:19001:9001"

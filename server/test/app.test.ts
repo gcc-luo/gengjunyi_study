@@ -13,6 +13,7 @@ const productionEnv = {
   MINIO_ACCESS_KEY: "minio-access-key",
   MINIO_SECRET_KEY: "minio-secret-key",
   MINIO_BUCKET: "family-learning-videos",
+  MINIO_PUBLIC_URL: "https://media.example.com",
   APP_ORIGIN: "https://learn.example.com",
   APP_TIMEZONE: "Asia/Shanghai",
   SESSION_SECRET: "p".repeat(32),
@@ -28,6 +29,7 @@ const productionRequiredKeys = [
   "MINIO_ACCESS_KEY",
   "MINIO_SECRET_KEY",
   "MINIO_BUCKET",
+  "MINIO_PUBLIC_URL",
   "APP_ORIGIN",
   "SESSION_SECRET",
 ] as const;
@@ -48,6 +50,7 @@ const testConfig: AppConfig = {
     accessKey: "test-access-key",
     secretKey: "test-secret-key",
     bucket: "family-learning-videos",
+    publicUrl: "http://localhost:19000",
   },
   appOrigin: "http://localhost:5173",
   appTimezone: "Asia/Shanghai",
@@ -142,6 +145,7 @@ describe("parseConfig", () => {
       accessKey: productionEnv.MINIO_ACCESS_KEY,
       secretKey: productionEnv.MINIO_SECRET_KEY,
       bucket: productionEnv.MINIO_BUCKET,
+      publicUrl: productionEnv.MINIO_PUBLIC_URL,
     });
     expect(config.appOrigin).toBe(productionEnv.APP_ORIGIN);
     expect(config.trustedProxies).toEqual(["172.30.0.2"]);
@@ -157,7 +161,7 @@ describe("parseConfig", () => {
     });
 
     expect(config.port).toBe(3000);
-    expect(config.minio.port).toBe(9000);
+    expect(config.minio.port).toBe(19000);
     expect(config.minio.useSsl).toBe(false);
     expect(config.minio.bucket).toBe("family-learning-videos");
     expect(config.appTimezone).toBe("Asia/Shanghai");
@@ -166,6 +170,7 @@ describe("parseConfig", () => {
       "postgresql://family_learning:family_learning_dev@localhost:5432/family_learning",
     );
     expect(config.minio.endpoint).toBe("localhost");
+    expect(config.minio.publicUrl).toBe("http://localhost:19000");
   });
 
   it("does not default credential secrets in any environment", () => {
@@ -190,6 +195,17 @@ describe("parseConfig", () => {
     expect(() =>
       parseConfig({ ...productionEnv, SESSION_SECRET: "too-short" }),
     ).toThrow();
+  });
+
+  it.each(["http://media.example.com", "https://media.example.com/storage", "https://user:pass@media.example.com"])(
+    "rejects a non-HTTPS or path-based public MinIO URL in production: %s",
+    (publicUrl) => {
+      expect(() => parseConfig({ ...productionEnv, MINIO_PUBLIC_URL: publicUrl })).toThrow();
+    },
+  );
+
+  it("requires HTTPS for the public application origin in production", () => {
+    expect(() => parseConfig({ ...productionEnv, APP_ORIGIN: "http://learn.example.com" })).toThrow();
   });
 
   it.each(["0.0.0.0", "::", "example.com", "172.30.0.2/24"])(

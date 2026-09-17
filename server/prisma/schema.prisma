@@ -104,6 +104,7 @@ model Video {
   byteSize      BigInt
   durationMs    Int?
   codec         String?
+  failureReason String?
   status        MediaStatus     @default(UPLOADING)
   sortOrder     Int             @default(0)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)

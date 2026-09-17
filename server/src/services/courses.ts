@@ -9,6 +9,7 @@ const courseInclude = {
       courseId: true,
       title: true,
       fileName: true,
+      failureReason: true,
       durationMs: true,
       status: true,
       sortOrder: true,
@@ -54,6 +55,7 @@ type CourseDtoSource = {
     courseId: string;
     title: string;
     fileName: string;
+    failureReason?: string | null;
     durationMs: number | null;
     status: string;
     sortOrder: number;
@@ -77,6 +79,7 @@ function toCourseDto(course: CourseDtoSource) {
       courseId: video.courseId,
       title: video.title,
       fileName: video.fileName,
+      failureReason: video.failureReason ?? null,
       durationMs: video.durationMs,
       status: video.status,
       sortOrder: video.sortOrder,

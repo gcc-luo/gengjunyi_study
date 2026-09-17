@@ -51,6 +51,11 @@ const environmentSchema = z
     MINIO_ACCESS_KEY: nonWhitespaceString,
     MINIO_SECRET_KEY: nonWhitespaceString,
     MINIO_BUCKET: nonWhitespaceString,
+    MINIO_PUBLIC_URL: z.string().url().refine((value) => {
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol) && url.pathname === "/" &&
+        !url.search && !url.hash && !url.username && !url.password;
+    }, "MINIO_PUBLIC_URL must be an HTTP(S) origin without a path or query"),
     APP_ORIGIN: appOriginSchema,
     TRUSTED_PROXIES: trustedProxiesSchema,
     APP_TIMEZONE: z.string().min(1).refine((value) => {
@@ -69,6 +74,20 @@ const environmentSchema = z
         code: "custom",
         path: ["TRUSTED_PROXIES"],
         message: "TRUSTED_PROXIES must explicitly list the reverse proxy address in production",
+      });
+    }
+    if (config.NODE_ENV === "production" && !config.MINIO_PUBLIC_URL.startsWith("https://")) {
+      context.addIssue({
+        code: "custom",
+        path: ["MINIO_PUBLIC_URL"],
+        message: "MINIO_PUBLIC_URL must use HTTPS in production",
+      });
+    }
+    if (config.NODE_ENV === "production" && !config.APP_ORIGIN.startsWith("https://")) {
+      context.addIssue({
+        code: "custom",
+        path: ["APP_ORIGIN"],
+        message: "APP_ORIGIN must use HTTPS in production",
       });
     }
     const nonWhitespaceSessionSecretLength = config.SESSION_SECRET.replace(/\s/g, "").length;
@@ -94,6 +113,7 @@ const environmentSchema = z
       accessKey: config.MINIO_ACCESS_KEY,
       secretKey: config.MINIO_SECRET_KEY,
       bucket: config.MINIO_BUCKET,
+      publicUrl: config.MINIO_PUBLIC_URL,
     },
     appOrigin: config.APP_ORIGIN,
     trustedProxies: config.TRUSTED_PROXIES,
@@ -113,9 +133,10 @@ const developmentDefaults = {
   DATABASE_URL:
     "postgresql://family_learning:family_learning_dev@localhost:5432/family_learning",
   MINIO_ENDPOINT: "localhost",
-  MINIO_PORT: "9000",
+  MINIO_PORT: "19000",
   MINIO_USE_SSL: "false",
   MINIO_BUCKET: "family-learning-videos",
+  MINIO_PUBLIC_URL: "http://localhost:19000",
   APP_ORIGIN: "http://localhost:5173",
   TRUSTED_PROXIES: "",
 };

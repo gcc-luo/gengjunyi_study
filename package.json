@@ -15,11 +15,14 @@
     "server:build": "npm run prisma:generate && tsc -p server/tsconfig.json",
     "server:start": "node server/dist/index.js",
     "admin:create": "tsx server/scripts/create-admin.ts",
+    "storage:init": "tsx server/scripts/init-storage.ts",
     "prisma:generate": "prisma generate --schema server/prisma/schema.prisma --config server/prisma.config.ts",
     "db:migrate:deploy": "prisma migrate deploy --schema server/prisma/schema.prisma --config server/prisma.config.ts",
     "db:seed": "npm run prisma:generate && prisma db seed --config server/prisma.config.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1134.0",
+    "@aws-sdk/s3-request-presigner": "^3.1134.0",
     "@fastify/cookie": "^11.1.2",
     "@fastify/helmet": "^13.1.1",
     "@fastify/rate-limit": "^11.2.0",
