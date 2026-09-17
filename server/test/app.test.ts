@@ -160,4 +160,17 @@ describe("parseConfig", () => {
       parseConfig({ ...productionEnv, SESSION_SECRET: "too-short" }),
     ).toThrow();
   });
+
+  it.each([
+    ["MINIO_ENDPOINT", "   "],
+    ["MINIO_ACCESS_KEY", "   "],
+    ["MINIO_SECRET_KEY", "   "],
+    ["MINIO_BUCKET", "   "],
+    ["SESSION_SECRET", " ".repeat(32)],
+  ] as const)(
+    "rejects production %s containing only whitespace",
+    (key, value) => {
+      expect(() => parseConfig({ ...productionEnv, [key]: value })).toThrow();
+    },
+  );
 });

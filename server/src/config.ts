@@ -8,6 +8,8 @@ const booleanFromEnvironment = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const nonWhitespaceString = z.string().refine((value) => /\S/u.test(value));
+
 const databaseUrlSchema = z
   .string()
   .url()
@@ -30,12 +32,12 @@ const environmentSchema = z
     NODE_ENV: nodeEnvSchema,
     PORT: z.coerce.number().int().min(1).max(65535),
     DATABASE_URL: databaseUrlSchema,
-    MINIO_ENDPOINT: z.string().min(1),
+    MINIO_ENDPOINT: nonWhitespaceString,
     MINIO_PORT: z.coerce.number().int().min(1).max(65535),
     MINIO_USE_SSL: booleanFromEnvironment,
-    MINIO_ACCESS_KEY: z.string().min(1),
-    MINIO_SECRET_KEY: z.string().min(1),
-    MINIO_BUCKET: z.string().min(1),
+    MINIO_ACCESS_KEY: nonWhitespaceString,
+    MINIO_SECRET_KEY: nonWhitespaceString,
+    MINIO_BUCKET: nonWhitespaceString,
     APP_ORIGIN: appOriginSchema,
     APP_TIMEZONE: z.string().min(1).refine((value) => {
       try {
@@ -48,7 +50,8 @@ const environmentSchema = z
     SESSION_SECRET: z.string().min(1),
   })
   .superRefine((config, context) => {
-    if (config.NODE_ENV === "production" && config.SESSION_SECRET.length < 32) {
+    const nonWhitespaceSessionSecretLength = config.SESSION_SECRET.replace(/\s/g, "").length;
+    if (config.NODE_ENV === "production" && nonWhitespaceSessionSecretLength < 32) {
       context.addIssue({
         code: "custom",
         path: ["SESSION_SECRET"],
