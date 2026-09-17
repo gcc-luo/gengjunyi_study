@@ -1,11 +1,12 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
 import { AuthProvider, type AuthSession } from '../../context/AuthProvider';
 import { createSeedSnapshot } from '../../data/seed';
 import { CourseStatus, VideoStatus, type Snapshot } from '../../types/domain';
 import { EYE_CARE_STORAGE_KEY } from './preferences';
+import { queryClient } from '../../lib/query-client';
 
 const testSession: AuthSession = { authenticated: true, admin: { id: 'admin-1', email: 'parent@example.com' }, activeChildId: null, activeChild: null, csrfToken: 'test-csrf' };
 
@@ -58,6 +59,9 @@ function recordsSnapshot(): Snapshot {
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   localStorage.clear();
   window.history.pushState({}, '', '/');
 });
@@ -79,6 +83,34 @@ describe('child learning pages', () => {
     expect(screen.getAllByRole('main')).toHaveLength(1);
     fireEvent.click(screen.getByRole('link', { name: /学习记录/ }));
     expect(screen.getAllByRole('main')).toHaveLength(1);
+  });
+
+  it('waits for the server to select the child before entering the remote child space', async () => {
+    const remoteSession: AuthSession = { authenticated: true, admin: { id: 'admin-1', email: 'parent@example.com' }, activeChildId: null, activeChild: null, csrfToken: 'csrf-test' };
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    let finishSelection!: (value: Response) => void;
+    const selectionResponse = new Promise<Response>((resolve) => { finishSelection = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), window.location.origin);
+      if (url.pathname === '/api/children') return response([{ id: 'child-one', name: '小星', avatar: '⭐', grade: '一年级', status: 'ACTIVE', createdAt: '2026-09-01T00:00:00.000Z' }]);
+      if (url.pathname === '/api/courses') return response([]);
+      if (url.pathname === '/api/overview') return response({ totals: { children: 1, courses: 0, readyVideos: 0, watchedSeconds: 0, completedVideos: 0 }, today: { watchedSeconds: 0, events: 0 }, week: { watchedSeconds: 0, startsAt: '2026-09-14T00:00:00.000Z' }, dailyActivity: [], recentActivity: [], continueLearning: [] });
+      if (url.pathname === '/api/records') return response({ total: 0, items: [] });
+      if (url.pathname === '/api/auth/active-child' && init?.method === 'PUT') return selectionResponse;
+      if (url.pathname === '/api/children/child-one/favorites') return response([]);
+      return response({ error: { code: 'NOT_FOUND', message: 'Not found' } });
+    }));
+    window.history.pushState({}, '', '/child/select');
+
+    render(<AuthProvider initialSession={remoteSession}><AppStoreProvider><App /></AppStoreProvider></AuthProvider>);
+    const childCard = await screen.findByRole('button', { name: '选择小星' });
+    fireEvent.click(childCard);
+
+    await waitFor(() => expect(childCard).toBeDisabled());
+    expect(window.location.pathname).toBe('/child/select');
+    await act(async () => { finishSelection(response({ activeChildId: 'child-one', activeChild: { id: 'child-one', name: '小星' } })); });
+    await waitFor(() => expect(window.location.pathname).toBe('/child/home'));
+    expect(await screen.findByRole('heading', { name: '你好，小星' })).toBeInTheDocument();
   });
 
   it('shows only active children and enters home after selecting one', () => {

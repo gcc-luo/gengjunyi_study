@@ -21,7 +21,7 @@ export interface AppStoreValue {
   snapshot: Snapshot;
   currentChildId: string | null;
   currentChild: Child | undefined;
-  setCurrentChild: (id: string | null) => void;
+  setCurrentChild: (id: string | null) => MaybePromise<void>;
   selectChild: (id: string | null) => void;
   subjects: Snapshot['subjects'];
   children: Child[];
@@ -251,6 +251,11 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     occurredAt: event.occurredAt,
   }));
   const progressByKey = new Map<string, WatchProgress>();
+  const watchSecondsByKey = new Map<string, number>();
+  for (const event of recentRecordsQuery.data?.items ?? []) {
+    const key = `${event.childId}:${event.videoId}`;
+    watchSecondsByKey.set(key, (watchSecondsByKey.get(key) ?? 0) + event.effectiveWatchSeconds);
+  }
   for (const event of recentRecordsQuery.data?.items ?? []) {
     if (event.progress && !progressByKey.has(`${event.childId}:${event.videoId}`)) {
       progressByKey.set(`${event.childId}:${event.videoId}`, {
@@ -259,7 +264,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
         lastPositionSeconds: event.progress.positionMs / 1000,
         maxProgress: event.progress.maxProgressPercent / 100,
         completed: event.progress.completed,
-        totalWatchSeconds: 0,
+        totalWatchSeconds: watchSecondsByKey.get(`${event.childId}:${event.videoId}`) ?? 0,
         updatedAt: event.occurredAt,
       });
     }
@@ -272,7 +277,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
         lastPositionSeconds: item.positionMs / 1000,
         maxProgress: item.maxProgressPercent / 100,
         completed: false,
-        totalWatchSeconds: 0,
+        totalWatchSeconds: watchSecondsByKey.get(`${item.childId}:${item.videoId}`) ?? 0,
         updatedAt: item.updatedAt,
       });
     }
@@ -299,8 +304,8 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     ]);
   };
   const currentChild = children.find((child) => child.id === activeChildId);
-  const setCurrentChild = (id: string | null) => {
-    if (id) return auth?.setActiveChild(id);
+  const setCurrentChild = async (id: string | null) => {
+    if (id) await auth?.setActiveChild(id);
   };
 
   const createCourse = async (input: CourseInput) => {
