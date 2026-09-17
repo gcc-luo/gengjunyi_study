@@ -19,13 +19,63 @@ import { useAppStore } from './context/AppStore';
 
 function LandingPage() {
   return (
-    <main>
-      <h1>小小学习星球</h1>
-      <p>陪伴家庭一起快乐学习。</p>
-      <nav aria-label="端入口">
-        <Link to="/child/select">进入儿童端</Link>
-        <Link to="/parent/overview">进入家长端</Link>
-      </nav>
+    <main className="landing-page">
+      <div className="landing-shell">
+        <header className="landing-topbar">
+          <Link className="landing-brand" to="/" aria-label="小小学习星球首页">
+            <span aria-hidden="true">✦</span>
+            小小学习星球
+          </Link>
+          <span className="landing-top-note">一个家庭，两种空间</span>
+        </header>
+
+        <div className="landing-layout">
+          <section className="landing-intro" aria-labelledby="landing-heading">
+            <p className="landing-kicker">家庭学习空间</p>
+            <h1 id="landing-heading">
+              陪伴每一次
+              <span>小小的进步</span>
+            </h1>
+            <p className="landing-lead">学习内容由家长准备，孩子自由探索。</p>
+            <p className="landing-description">把优质学习视频整理成一个简单、安心的家庭学习书架。</p>
+            <div className="landing-orbit-art" aria-hidden="true">
+              <span className="landing-orbit-sun" />
+              <span className="landing-orbit-ring" />
+              <span className="landing-orbit-dot" />
+              <span className="landing-orbit-star">✦</span>
+            </div>
+          </section>
+
+          <nav className="landing-entries" aria-label="选择学习空间">
+            <Link className="landing-entry-card landing-child-entry" to="/child/select">
+              <span className="landing-entry-icon" aria-hidden="true">🚀</span>
+              <span className="landing-entry-copy">
+                <span className="landing-entry-kicker">给孩子的学习空间</span>
+                <strong>儿童学习空间</strong>
+                <span>选头像、找课程，接着上次继续学习。</span>
+              </span>
+              <span className="landing-entry-action">
+                <span>进入儿童端</span>
+                <span aria-hidden="true">→</span>
+              </span>
+            </Link>
+
+            <Link className="landing-entry-card landing-parent-entry" to="/parent/overview">
+              <span className="landing-entry-icon" aria-hidden="true">📚</span>
+              <span className="landing-entry-copy">
+                <span className="landing-entry-kicker">家庭内容管理</span>
+                <strong>家长管理中心</strong>
+                <span>管理课程、孩子与学习记录。</span>
+              </span>
+              <span className="landing-entry-action">
+                <span>进入家长端</span>
+                <span aria-hidden="true">→</span>
+              </span>
+            </Link>
+            <p className="landing-entries-note">每个空间都为家庭学习而准备</p>
+          </nav>
+        </div>
+      </div>
     </main>
   );
 }
