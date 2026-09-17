@@ -85,6 +85,7 @@ describe("GET /api/health", () => {
       headers: {
         cookie: "cookie-sentinel",
         authorization: "Bearer authorization-sentinel",
+        referer: "https://learn.example.com/watch?token=referer-sentinel",
       },
     });
 
@@ -94,10 +95,28 @@ describe("GET /api/health", () => {
     expect(output).not.toContain("query-sentinel");
     expect(output).not.toContain("cookie-sentinel");
     expect(output).not.toContain("authorization-sentinel");
+    expect(output).not.toContain("referer-sentinel");
   });
 });
 
 describe("parseConfig", () => {
+  it("accepts a complete production config and maps its key fields", () => {
+    const config = parseConfig(productionEnv);
+
+    expect(config.nodeEnv).toBe("production");
+    expect(config.databaseUrl).toBe(productionEnv.DATABASE_URL);
+    expect(config.minio).toEqual({
+      endpoint: productionEnv.MINIO_ENDPOINT,
+      port: 9000,
+      useSsl: true,
+      accessKey: productionEnv.MINIO_ACCESS_KEY,
+      secretKey: productionEnv.MINIO_SECRET_KEY,
+      bucket: productionEnv.MINIO_BUCKET,
+    });
+    expect(config.appOrigin).toBe(productionEnv.APP_ORIGIN);
+    expect(config.sessionSecret).toBe(productionEnv.SESSION_SECRET);
+  });
+
   it("applies only the safe local defaults in development", () => {
     const config = parseConfig({
       NODE_ENV: "development",

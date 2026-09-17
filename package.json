@@ -11,7 +11,7 @@
     "server:dev": "tsx watch server/src/index.ts",
     "server:build": "tsc -p server/tsconfig.json",
     "server:start": "node server/dist/index.js",
-    "db:migrate:deploy": "prisma migrate deploy"
+    "db:migrate:deploy": "prisma migrate deploy --schema server/prisma/schema.prisma"
   },
   "dependencies": {
     "@fastify/helmet": "^13.1.1",

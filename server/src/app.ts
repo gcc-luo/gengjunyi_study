@@ -24,15 +24,10 @@ export function buildApp({
       },
       serializers: {
         req(request) {
-          const headers = { ...request.headers };
-          delete headers.cookie;
-          delete headers.authorization;
-
           return {
             method: request.method,
             url: stripQueryString(request.url),
             hostname: request.hostname,
-            headers,
           };
         },
       },
