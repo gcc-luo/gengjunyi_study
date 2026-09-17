@@ -5,6 +5,9 @@ import type { AppConfig } from "./config.js";
 import { createPrismaClient } from "./db.js";
 import { installAuthProtection } from "./plugins/auth.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerChildrenRoutes } from "./routes/children.js";
+import { registerCourseRoutes } from "./routes/courses.js";
+import { registerChildContentRoutes } from "./routes/child-content.js";
 import type { PrismaClient } from "./generated/prisma/client.js";
 
 function stripQueryString(url: string): string {
@@ -56,6 +59,13 @@ export function buildApp({
   installAuthProtection(app, config, prisma);
   void app.register(async (authScope) => {
     registerAuthRoutes(authScope, config, prisma);
+  });
+  void app.register(async (parentScope) => {
+    registerChildrenRoutes(parentScope, prisma);
+  });
+  void app.register(async (parentScope) => {
+    registerCourseRoutes(parentScope, prisma);
+    registerChildContentRoutes(parentScope, prisma);
   });
 
   app.setErrorHandler((error, _request, reply) => {
