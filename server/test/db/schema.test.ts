@@ -89,12 +89,20 @@ async function createFixture(): Promise<Fixture> {
   }
 }
 
-async function cleanupFixture(fixture: Fixture): Promise<void> {
-  await prisma.watchEvent.deleteMany({ where: { childId: fixture.childId } });
-  await prisma.favorite.deleteMany({ where: { childId: fixture.childId } });
-  await prisma.watchProgress.deleteMany({ where: { childId: fixture.childId } });
-  await prisma.uploadSession.deleteMany({ where: { videoId: fixture.videoId } });
-  await prisma.video.deleteMany({ where: { id: fixture.videoId } });
+async function cleanupFixture(
+  fixture: Fixture,
+  additionalVideoIds: readonly string[] = [],
+): Promise<void> {
+  const videoIds = [fixture.videoId, ...additionalVideoIds];
+  const fixtureHistoryWhere = {
+    OR: [{ childId: fixture.childId }, { videoId: { in: videoIds } }],
+  };
+
+  await prisma.watchEvent.deleteMany({ where: fixtureHistoryWhere });
+  await prisma.favorite.deleteMany({ where: fixtureHistoryWhere });
+  await prisma.watchProgress.deleteMany({ where: fixtureHistoryWhere });
+  await prisma.uploadSession.deleteMany({ where: { videoId: { in: videoIds } } });
+  await prisma.video.deleteMany({ where: { id: { in: videoIds } } });
   await prisma.course.deleteMany({ where: { id: fixture.courseId } });
   await prisma.child.deleteMany({ where: { id: fixture.childId } });
   await prisma.subject.deleteMany({ where: { id: fixture.subjectId } });
@@ -154,6 +162,40 @@ describe("PostgreSQL learning schema constraints", () => {
         }),
       ).rejects.toMatchObject({ code: "P2002" });
     } finally {
+      await cleanupFixture(fixture, [duplicateId]);
+    }
+  });
+
+  it("cleans all candidate videos before deleting fixture parents", async () => {
+    const fixture = await createFixture();
+    const candidateVideoId = randomUUID();
+
+    try {
+      await prisma.video.create({
+        data: {
+          id: candidateVideoId,
+          courseId: fixture.courseId,
+          title: "Cleanup candidate video",
+          objectKey: `schema-test/${candidateVideoId}/cleanup.mp4`,
+          fileName: "cleanup.mp4",
+          byteSize: BigInt(1),
+          durationMs: 1,
+          codec: "h264",
+          status: "READY",
+          sortOrder: 1,
+        },
+      });
+
+      await cleanupFixture(fixture, [candidateVideoId]);
+      await expect(
+        prisma.video.findMany({
+          where: { id: { in: [fixture.videoId, candidateVideoId] } },
+        }),
+      ).resolves.toHaveLength(0);
+    } finally {
+      await prisma.video.deleteMany({
+        where: { id: { in: [fixture.videoId, candidateVideoId] } },
+      });
       await cleanupFixture(fixture);
     }
   });
@@ -186,12 +228,13 @@ describe("PostgreSQL learning schema constraints", () => {
 
   it("rejects a video whose course does not exist", async () => {
     const fixture = await createFixture();
+    const orphanVideoId = randomUUID();
 
     try {
       await expect(
         prisma.video.create({
           data: {
-            id: randomUUID(),
+            id: orphanVideoId,
             courseId: randomUUID(),
             title: "Orphan video",
             objectKey: `schema-test/${randomUUID()}/orphan.mp4`,
@@ -205,7 +248,7 @@ describe("PostgreSQL learning schema constraints", () => {
         }),
       ).rejects.toMatchObject({ code: "P2003" });
     } finally {
-      await cleanupFixture(fixture);
+      await cleanupFixture(fixture, [orphanVideoId]);
     }
   });
 
