@@ -7,10 +7,17 @@ function stripQueryString(url: string): string {
   return queryStart === -1 ? url : url.slice(0, queryStart);
 }
 
-export function buildApp({ config }: { config: AppConfig }): FastifyInstance {
+export function buildApp({
+  config,
+  loggerStream,
+}: {
+  config: AppConfig;
+  loggerStream?: { write(message: string): void };
+}): FastifyInstance {
   const app = Fastify({
     logger: {
       level: config.nodeEnv === "test" ? "silent" : "info",
+      ...(loggerStream ? { stream: loggerStream } : {}),
       redact: {
         paths: ["req.headers.cookie", "req.headers.authorization"],
         censor: "[REDACTED]",

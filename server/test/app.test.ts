@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { Writable } from "node:stream";
 import { buildApp } from "../src/app";
-import { parseConfig } from "../src/config";
+import { parseConfig, type AppConfig } from "../src/config";
 
 const productionEnv = {
   NODE_ENV: "production",
@@ -17,6 +18,35 @@ const productionEnv = {
   PORT: "8080",
 };
 
+const productionRequiredKeys = [
+  "DATABASE_URL",
+  "MINIO_ENDPOINT",
+  "MINIO_PORT",
+  "MINIO_USE_SSL",
+  "MINIO_ACCESS_KEY",
+  "MINIO_SECRET_KEY",
+  "MINIO_BUCKET",
+  "APP_ORIGIN",
+  "SESSION_SECRET",
+] as const;
+
+const testConfig: AppConfig = {
+  nodeEnv: "test",
+  port: 3000,
+  databaseUrl: "postgresql://test:test@localhost:5432/test",
+  minio: {
+    endpoint: "localhost",
+    port: 9000,
+    useSsl: false,
+    accessKey: "test-access-key",
+    secretKey: "test-secret-key",
+    bucket: "family-learning-videos",
+  },
+  appOrigin: "http://localhost:5173",
+  appTimezone: "Asia/Shanghai",
+  sessionSecret: "test-session-secret-that-is-long-enough",
+};
+
 describe("GET /api/health", () => {
   let app: ReturnType<typeof buildApp> | undefined;
 
@@ -26,30 +56,44 @@ describe("GET /api/health", () => {
   });
 
   it("returns the health status from an injected app without listening", async () => {
-    app = buildApp({
-      config: {
-        nodeEnv: "test",
-        port: 3000,
-        databaseUrl: "postgresql://test:test@localhost:5432/test",
-        minio: {
-          endpoint: "localhost",
-          port: 9000,
-          useSsl: false,
-          accessKey: "test-access-key",
-          secretKey: "test-secret-key",
-          bucket: "family-learning-videos",
-        },
-        appOrigin: "http://localhost:5173",
-        appTimezone: "Asia/Shanghai",
-        sessionSecret: "test-session-secret-that-is-long-enough",
-      },
-    });
+    app = buildApp({ config: testConfig });
 
     const response = await app.inject({ method: "GET", url: "/api/health" });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: "ok" });
     expect(app.server.listening).toBe(false);
+  });
+
+  it("redacts query strings and authentication headers from request logs", async () => {
+    const logOutput: string[] = [];
+    const loggerStream = new Writable({
+      write(chunk, _encoding, callback) {
+        logOutput.push(chunk.toString());
+        callback();
+      },
+    });
+
+    app = buildApp({
+      config: { ...testConfig, nodeEnv: "development" },
+      loggerStream,
+    });
+
+    await app.inject({
+      method: "GET",
+      url: "/api/health?token=query-sentinel",
+      headers: {
+        cookie: "cookie-sentinel",
+        authorization: "Bearer authorization-sentinel",
+      },
+    });
+
+    const output = logOutput.join("");
+    expect(output).toContain("/api/health");
+    expect(output).not.toContain("/api/health?");
+    expect(output).not.toContain("query-sentinel");
+    expect(output).not.toContain("cookie-sentinel");
+    expect(output).not.toContain("authorization-sentinel");
   });
 });
 
@@ -81,6 +125,16 @@ describe("parseConfig", () => {
   it("requires database, MinIO, origin, and session settings in production", () => {
     expect(() => parseConfig({ NODE_ENV: "production" })).toThrow();
   });
+
+  it.each(productionRequiredKeys)(
+    "rejects production config with %s omitted",
+    (key) => {
+      const env: Record<string, string> = { ...productionEnv };
+      delete env[key];
+
+      expect(() => parseConfig(env)).toThrow();
+    },
+  );
 
   it("requires a production session secret of at least 32 characters", () => {
     expect(() =>
