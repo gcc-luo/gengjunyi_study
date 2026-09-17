@@ -2,5 +2,6 @@
 .superpowers/
 node_modules/
 dist/
+server/src/generated/prisma/
 playwright-report/
 test-results/

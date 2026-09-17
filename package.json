@@ -10,10 +10,14 @@
     "test:e2e": "playwright test",
     "server:dev": "tsx watch server/src/index.ts",
     "server:build": "tsc -p server/tsconfig.json",
-    "server:start": "node server/dist/index.js"
+    "server:start": "node server/dist/index.js",
+    "db:migrate:deploy": "prisma migrate deploy --schema server/prisma/schema.prisma --config server/prisma.config.ts",
+    "db:seed": "tsx server/prisma/seed.ts"
   },
   "dependencies": {
     "@fastify/helmet": "^13.1.1",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
     "fastify": "^5.12.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -28,7 +32,9 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "17.4.2",
     "jsdom": "^25.0.1",
+    "prisma": "7.10.0",
     "tsx": "^4.23.13",
     "typescript": "~5.6.3",
     "vite": "^6.0.5",
