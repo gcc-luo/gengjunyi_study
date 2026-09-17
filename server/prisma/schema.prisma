@@ -20,6 +20,7 @@ enum CourseStatus {
 
 enum MediaStatus {
   UPLOADING
+  PROCESSING
   READY
   FAILED
   ARCHIVED
@@ -131,7 +132,6 @@ model UploadSession {
   video          Video?              @relation(fields: [videoId], references: [id], onDelete: SetNull)
 
   @@index([status, expiresAt])
-  @@index([videoId])
 }
 
 model StorageQuota {
@@ -143,28 +143,30 @@ model StorageQuota {
 }
 
 model WatchProgress {
-  id         String   @id @default(cuid())
-  childId    String
-  videoId    String
-  positionMs Int      @default(0)
-  completed  Boolean  @default(false)
-  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
-  child      Child    @relation(fields: [childId], references: [id], onDelete: Restrict)
-  video      Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  id                 String   @id @default(cuid())
+  childId            String
+  videoId            String
+  positionMs         Int      @default(0)
+  maxProgressPercent Int      @default(0)
+  completed          Boolean  @default(false)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
+  child              Child    @relation(fields: [childId], references: [id], onDelete: Restrict)
+  video              Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
 
   @@unique([childId, videoId])
   @@index([videoId])
 }
 
 model WatchEvent {
-  id         String   @id @default(cuid())
-  childId    String
-  videoId    String
-  eventType  String
-  positionMs Int?
-  occurredAt DateTime @default(now()) @db.Timestamptz(3)
-  child      Child    @relation(fields: [childId], references: [id], onDelete: Restrict)
-  video      Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
+  id             String   @id @default(cuid())
+  childId        String
+  videoId        String
+  eventType      String
+  positionMs     Int?
+  watchedSeconds Int      @default(0)
+  occurredAt     DateTime @default(now()) @db.Timestamptz(3)
+  child          Child    @relation(fields: [childId], references: [id], onDelete: Restrict)
+  video          Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
 
   @@index([childId, occurredAt])
   @@index([videoId, occurredAt])

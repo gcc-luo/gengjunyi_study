@@ -6,13 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run",
+    "test": "vitest run src",
+    "test:server": "npm run prisma:generate && vitest run server/test --exclude server/test/db/**",
+    "test:db": "npm run prisma:generate && vitest run server/test/db",
+    "test:all": "npm run test && npm run test:server && npm run test:db",
     "test:e2e": "playwright test",
-    "server:dev": "tsx watch server/src/index.ts",
-    "server:build": "tsc -p server/tsconfig.json",
+    "server:dev": "npm run prisma:generate && tsx watch server/src/index.ts",
+    "server:build": "npm run prisma:generate && tsc -p server/tsconfig.json",
     "server:start": "node server/dist/index.js",
+    "prisma:generate": "prisma generate --schema server/prisma/schema.prisma --config server/prisma.config.ts",
     "db:migrate:deploy": "prisma migrate deploy --schema server/prisma/schema.prisma --config server/prisma.config.ts",
-    "db:seed": "tsx server/prisma/seed.ts"
+    "db:seed": "npm run prisma:generate && prisma db seed --config server/prisma.config.ts"
   },
   "dependencies": {
     "@fastify/helmet": "^13.1.1",
