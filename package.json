@@ -14,14 +14,18 @@
     "server:dev": "npm run prisma:generate && tsx watch server/src/index.ts",
     "server:build": "npm run prisma:generate && tsc -p server/tsconfig.json",
     "server:start": "node server/dist/index.js",
+    "admin:create": "tsx server/scripts/create-admin.ts",
     "prisma:generate": "prisma generate --schema server/prisma/schema.prisma --config server/prisma.config.ts",
     "db:migrate:deploy": "prisma migrate deploy --schema server/prisma/schema.prisma --config server/prisma.config.ts",
     "db:seed": "npm run prisma:generate && prisma db seed --config server/prisma.config.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^11.2.0",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
+    "argon2": "^0.45.1",
     "fastify": "^5.12.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

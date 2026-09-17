@@ -6,6 +6,7 @@ import { parseConfig, type AppConfig } from "../src/config";
 const productionEnv = {
   NODE_ENV: "production",
   DATABASE_URL: "postgresql://family:secret@db.example.com:5432/family",
+  TRUSTED_PROXIES: "172.30.0.2",
   MINIO_ENDPOINT: "minio.example.com",
   MINIO_PORT: "9000",
   MINIO_USE_SSL: "true",
@@ -20,6 +21,7 @@ const productionEnv = {
 
 const productionRequiredKeys = [
   "DATABASE_URL",
+  "TRUSTED_PROXIES",
   "MINIO_ENDPOINT",
   "MINIO_PORT",
   "MINIO_USE_SSL",
@@ -33,7 +35,12 @@ const productionRequiredKeys = [
 const testConfig: AppConfig = {
   nodeEnv: "test",
   port: 3000,
-  databaseUrl: "postgresql://test:test@localhost:5432/test",
+  sessionCookieName: "fl_parent_session",
+  sessionLifetimeSeconds: 7 * 24 * 60 * 60,
+  secureCookies: false,
+  databaseUrl:
+    "postgresql://family_learning_test:family_learning_test_local_only@127.0.0.1:15432/family_learning_test",
+  trustedProxies: [],
   minio: {
     endpoint: "localhost",
     port: 9000,
@@ -97,6 +104,29 @@ describe("GET /api/health", () => {
     expect(output).not.toContain("authorization-sentinel");
     expect(output).not.toContain("referer-sentinel");
   });
+
+  it("uses forwarded client addresses only from explicitly trusted proxy IPs", async () => {
+    app = buildApp({
+      config: { ...testConfig, trustedProxies: ["127.0.0.1"] },
+    });
+    app.get("/api/test/client-ip", async (request) => ({ ip: request.ip }));
+
+    const fromTrustedProxy = await app.inject({
+      method: "GET",
+      url: "/api/test/client-ip",
+      remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "198.51.100.11" },
+    });
+    const fromUntrustedPeer = await app.inject({
+      method: "GET",
+      url: "/api/test/client-ip",
+      remoteAddress: "192.0.2.10",
+      headers: { "x-forwarded-for": "198.51.100.12" },
+    });
+
+    expect(fromTrustedProxy.json()).toEqual({ ip: "198.51.100.11" });
+    expect(fromUntrustedPeer.json()).toEqual({ ip: "192.0.2.10" });
+  });
 });
 
 describe("parseConfig", () => {
@@ -114,6 +144,7 @@ describe("parseConfig", () => {
       bucket: productionEnv.MINIO_BUCKET,
     });
     expect(config.appOrigin).toBe(productionEnv.APP_ORIGIN);
+    expect(config.trustedProxies).toEqual(["172.30.0.2"]);
     expect(config.sessionSecret).toBe(productionEnv.SESSION_SECRET);
   });
 
@@ -160,6 +191,13 @@ describe("parseConfig", () => {
       parseConfig({ ...productionEnv, SESSION_SECRET: "too-short" }),
     ).toThrow();
   });
+
+  it.each(["0.0.0.0", "::", "example.com", "172.30.0.2/24"])(
+    "rejects non-exact production trusted proxy entries: %s",
+    (address) => {
+      expect(() => parseConfig({ ...productionEnv, TRUSTED_PROXIES: address })).toThrow();
+    },
+  );
 
   it.each([
     ["MINIO_ENDPOINT", "   "],

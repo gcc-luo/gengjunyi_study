@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { z } from "zod";
 
 const nodeEnvSchema = z.enum(["development", "test", "production"]);
@@ -9,6 +10,18 @@ const booleanFromEnvironment = z.preprocess((value) => {
 }, z.boolean());
 
 const nonWhitespaceString = z.string().refine((value) => /\S/u.test(value));
+const trustedProxiesSchema = z.preprocess(
+  (value) =>
+    typeof value === "string"
+      ? value.split(",").map((address) => address.trim()).filter(Boolean)
+      : value ?? [],
+  z.array(
+    z.string().refine(
+      (address) => isIP(address) !== 0 && address !== "0.0.0.0" && address !== "::",
+      "TRUSTED_PROXIES must contain exact IPv4 or IPv6 addresses, not wildcard addresses",
+    ),
+  ),
+);
 
 const databaseUrlSchema = z
   .string()
@@ -39,6 +52,7 @@ const environmentSchema = z
     MINIO_SECRET_KEY: nonWhitespaceString,
     MINIO_BUCKET: nonWhitespaceString,
     APP_ORIGIN: appOriginSchema,
+    TRUSTED_PROXIES: trustedProxiesSchema,
     APP_TIMEZONE: z.string().min(1).refine((value) => {
       try {
         new Intl.DateTimeFormat("en-US", { timeZone: value });
@@ -50,6 +64,13 @@ const environmentSchema = z
     SESSION_SECRET: z.string().min(1),
   })
   .superRefine((config, context) => {
+    if (config.NODE_ENV === "production" && config.TRUSTED_PROXIES.length === 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["TRUSTED_PROXIES"],
+        message: "TRUSTED_PROXIES must explicitly list the reverse proxy address in production",
+      });
+    }
     const nonWhitespaceSessionSecretLength = config.SESSION_SECRET.replace(/\s/g, "").length;
     if (config.NODE_ENV === "production" && nonWhitespaceSessionSecretLength < 32) {
       context.addIssue({
@@ -62,6 +83,9 @@ const environmentSchema = z
   .transform((config) => ({
     nodeEnv: config.NODE_ENV,
     port: config.PORT,
+    sessionCookieName: "fl_parent_session",
+    sessionLifetimeSeconds: 7 * 24 * 60 * 60,
+    secureCookies: config.NODE_ENV === "production",
     databaseUrl: config.DATABASE_URL,
     minio: {
       endpoint: config.MINIO_ENDPOINT,
@@ -72,6 +96,7 @@ const environmentSchema = z
       bucket: config.MINIO_BUCKET,
     },
     appOrigin: config.APP_ORIGIN,
+    trustedProxies: config.TRUSTED_PROXIES,
     appTimezone: config.APP_TIMEZONE,
     sessionSecret: config.SESSION_SECRET,
   }));
@@ -92,6 +117,7 @@ const developmentDefaults = {
   MINIO_USE_SSL: "false",
   MINIO_BUCKET: "family-learning-videos",
   APP_ORIGIN: "http://localhost:5173",
+  TRUSTED_PROXIES: "",
 };
 
 export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
