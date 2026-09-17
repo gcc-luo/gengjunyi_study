@@ -381,6 +381,7 @@ describe('WatchPage playback loop', () => {
       createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-02T00:00:00.000Z',
       videos: [{ id: 'video-one', courseId: 'course-one', title: '第1课 认识数字', fileName: 'one.mp4', durationMs: 20_000, status: 'READY', sortOrder: 0, createdAt: '2026-09-01T00:00:00.000Z' }],
     };
+    let playbackUrlCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), window.location.origin);
       const body = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
@@ -389,7 +390,10 @@ describe('WatchPage playback loop', () => {
       if (url.pathname === '/api/overview') return body(overview);
       if (url.pathname === '/api/records') return body({ total: 0, items: [] });
       if (url.pathname === '/api/children/child-one/favorites') return body([]);
-      if (url.pathname === '/api/videos/video-one/playback') return body({ url: 'https://minio.example.test/private/video.mp4', expiresInSeconds: 7200 });
+      if (url.pathname === '/api/videos/video-one/playback') {
+        playbackUrlCount += 1;
+        return body({ url: `https://minio.example.test/private/video-${playbackUrlCount}.mp4`, expiresInSeconds: 7200 });
+      }
       if (url.pathname === '/api/children/child-one/videos/video-one/progress' && init?.method === 'PUT') return body({ progress: { childId: 'child-one', videoId: 'video-one', positionMs: 10_000, maxProgressPercent: 50, completed: false, updatedAt: '2026-09-17T00:00:00.000Z' }, recordedWatchedSeconds: 0 });
       return body({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
     });
@@ -407,7 +411,7 @@ describe('WatchPage playback loop', () => {
 
     await waitFor(() => expect(document.querySelector('video[aria-label="视频播放器"]')).toBeTruthy());
     const player = document.querySelector('video[aria-label="视频播放器"]') as HTMLVideoElement;
-    expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video.mp4');
+    expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-1.mp4');
     expect(player).toHaveAttribute('controls');
     expect(screen.queryByText('演示播放')).not.toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/videos/video-one/playback'), expect.objectContaining({ method: 'POST' }));
@@ -419,5 +423,10 @@ describe('WatchPage playback loop', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT')).toBe(true));
     const progressCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT');
     expect(JSON.parse(String(progressCall?.[1]?.body))).toMatchObject({ positionMs: 10_000, eventType: 'PROGRESS' });
+
+    fireEvent.error(player);
+    await waitFor(() => expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-2.mp4'));
+    fireEvent.loadedMetadata(player);
+    expect(player.currentTime).toBe(10);
   });
 });

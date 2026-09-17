@@ -54,6 +54,7 @@ export function WatchPage() {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [lastHeartbeatAt, setLastHeartbeatAt] = useState(() => initialProgress ? Date.parse(initialProgress.updatedAt) || Date.now() : Date.now());
   const [fullscreenMessage, setFullscreenMessage] = useState('');
+  const [mediaFailed, setMediaFailed] = useState(false);
 
   const isMountedRef = useRef(false);
   const isPlayingRef = useRef(isPlaying);
@@ -63,6 +64,8 @@ export function WatchPage() {
   const dirtyRef = useRef(false);
   const playerScreenRef = useRef<FullscreenElement>(null);
   const videoElementRef = useRef<HTMLVideoElement>(null);
+  const playbackResumeRef = useRef<{ position: number; wasPlaying: boolean } | null>(null);
+  const renewedPlaybackRef = useRef(false);
   const videoIdRef = useRef(videoId ?? '');
   const childIdRef = useRef(currentChildId);
   const durationRef = useRef(duration);
@@ -120,6 +123,30 @@ export function WatchPage() {
     setIsPlaying(false);
   };
 
+  const renewPlaybackUrl = (manual = false) => {
+    if (manual) renewedPlaybackRef.current = false;
+    if (renewedPlaybackRef.current) {
+      setMediaFailed(true);
+      setFullscreenMessage('视频连接仍未恢复，请检查网络后重试。');
+      return;
+    }
+    const media = videoElementRef.current;
+    playbackResumeRef.current = {
+      position: clampPosition(media?.currentTime ?? positionRef.current, durationRef.current),
+      wasPlaying: media ? !media.paused : isPlayingRef.current,
+    };
+    renewedPlaybackRef.current = true;
+    setMediaFailed(false);
+    setFullscreenMessage('播放授权正在更新，稍候将从当前位置继续…');
+    const previousUrl = playbackQuery.data?.url;
+    void playbackQuery.refetch().then(({ data, error }) => {
+      if (error || !data?.url || data.url === previousUrl) {
+        setMediaFailed(true);
+        setFullscreenMessage('未能建立新的视频连接，请检查网络后重试。');
+      }
+    });
+  };
+
   const flushProgress = useCallback((playing = isPlayingRef.current) => {
     const pending = pendingWatchSecondsRef.current;
     persistProgress(positionRef.current, pending, playing);
@@ -174,6 +201,9 @@ export function WatchPage() {
     const routeKey = `${currentChildId ?? ''}:${videoId ?? ''}`;
     if (routeKey === initializedRouteRef.current) return;
     videoElementRef.current?.pause();
+    playbackResumeRef.current = null;
+    renewedPlaybackRef.current = false;
+    setMediaFailed(false);
     if (childIdRef.current === currentChildId) flushProgress(isPlayingRef.current);
     else {
       pendingWatchSecondsRef.current = 0;
@@ -360,12 +390,21 @@ export function WatchPage() {
         {playbackQuery.data?.url && <video key={video.id} ref={videoElementRef} className="watch-video" aria-label="视频播放器" src={playbackQuery.data.url} controls playsInline preload="metadata" onLoadedMetadata={(event) => {
           const media = event.currentTarget;
           if (Number.isFinite(media.duration) && media.duration > 0) durationRef.current = media.duration;
-          const resumeAt = clampPosition(initialProgress?.lastPositionSeconds ?? positionRef.current, media.duration || durationRef.current);
+          const renewedPlayback = playbackResumeRef.current;
+          const resumeAt = clampPosition(renewedPlayback?.position ?? initialProgress?.lastPositionSeconds ?? positionRef.current, media.duration || durationRef.current);
           media.currentTime = resumeAt;
           positionRef.current = resumeAt;
           setPositionSeconds(resumeAt);
           media.playbackRate = playbackRateRef.current;
-        }} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={() => { isPlayingRef.current = true; setIsPlaying(true); }} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => setFullscreenMessage('视频加载失败，请检查 MinIO 公网访问与 HTTPS/CORS 配置')} />}
+          if (renewedPlayback) {
+            playbackResumeRef.current = null;
+            renewedPlaybackRef.current = false;
+            setMediaFailed(false);
+            setFullscreenMessage('');
+            if (renewedPlayback.wasPlaying) void media.play().catch(() => setFullscreenMessage('已恢复播放位置，请点击视频继续播放。'));
+          }
+        }} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={() => { isPlayingRef.current = true; setIsPlaying(true); }} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
+        {mediaFailed && <button className="watch-media-retry" type="button" onClick={() => renewPlaybackUrl(true)}>重新连接视频</button>}
         <button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>
         {fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}
       </div> : <>
