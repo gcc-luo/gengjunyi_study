@@ -2,16 +2,19 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it } from 'vitest';
 import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
+import { AuthProvider, type AuthSession } from '../../context/AuthProvider';
 import { createSeedSnapshot } from '../../data/seed';
 import { CourseStatus, VideoStatus, type Snapshot } from '../../types/domain';
 import { EYE_CARE_STORAGE_KEY } from '../child/preferences';
 
+const testSession: AuthSession = { authenticated: true, admin: { id: 'admin-1', email: 'parent@example.com' }, activeChildId: null, activeChild: null, csrfToken: 'test-csrf' };
+
 function renderRoute(path: string, snapshot?: Snapshot) {
   window.history.pushState({}, '', path);
   return render(
-    <AppStoreProvider initialSnapshot={snapshot ?? createSeedSnapshot()}>
-      <App />
-    </AppStoreProvider>,
+    <AuthProvider initialSession={testSession}>
+      <AppStoreProvider initialSnapshot={snapshot ?? createSeedSnapshot()}><App /></AppStoreProvider>
+    </AuthProvider>,
   );
 }
 
@@ -225,7 +228,7 @@ describe('parent management pages', () => {
 
     cleanup();
     window.history.pushState({}, '', '/parent/uploads');
-    render(<AppStoreProvider><App /></AppStoreProvider>);
+    render(<AuthProvider initialSession={testSession}><AppStoreProvider><App /></AppStoreProvider></AuthProvider>);
     expect(screen.getByText('active.mp4')).toBeInTheDocument();
     expect(screen.getByText('fail.mp4')).toBeInTheDocument();
     expect(screen.getByText('cancel.mp4')).toBeInTheDocument();
@@ -312,7 +315,7 @@ describe('parent management pages', () => {
     cleanup();
 
     window.history.pushState({}, '', '/parent/uploads');
-    render(<AppStoreProvider><App /></AppStoreProvider>);
+    render(<AuthProvider initialSession={testSession}><AppStoreProvider><App /></AppStoreProvider></AuthProvider>);
     const persisted = JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}');
     expect(persisted.videos.filter((video: { courseId: string; fileName: string }) => video.courseId === 'course-chinese' && video.fileName === '第99课.mp4')).toHaveLength(1);
   });

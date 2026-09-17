@@ -2,16 +2,19 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it } from 'vitest';
 import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
+import { AuthProvider, type AuthSession } from '../../context/AuthProvider';
 import { createSeedSnapshot } from '../../data/seed';
 import { CourseStatus, VideoStatus, type Snapshot } from '../../types/domain';
 import { EYE_CARE_STORAGE_KEY } from './preferences';
 
+const testSession: AuthSession = { authenticated: true, admin: { id: 'admin-1', email: 'parent@example.com' }, activeChildId: null, activeChild: null, csrfToken: 'test-csrf' };
+
 function renderRoute(path: string, snapshot?: Snapshot) {
   window.history.pushState({}, '', path);
   return render(
-    <AppStoreProvider initialSnapshot={snapshot ?? createSeedSnapshot()}>
-      <App />
-    </AppStoreProvider>,
+    <AuthProvider initialSession={testSession}>
+      <AppStoreProvider initialSnapshot={snapshot ?? createSeedSnapshot()}><App /></AppStoreProvider>
+    </AuthProvider>,
   );
 }
 
