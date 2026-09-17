@@ -1,0 +1,17 @@
+.git
+.worktrees
+.superpowers
+node_modules
+dist
+tests
+docs
+server/test
+src/**/*.test.*
+playwright-report
+test-results
+coverage
+*.log
+.env
+.env.*
+!.env.example
+ops/.env.production

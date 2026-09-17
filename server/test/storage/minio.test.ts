@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { afterAll, describe, expect, it } from "vitest";
 import { MinioStorage } from "../../src/storage/minio";
 
@@ -6,8 +7,8 @@ const enabled = process.env.RUN_MINIO_TESTS === "1";
 const bucket = process.env.MINIO_TEST_BUCKET ?? "family-learning-mvp-test";
 const endpoint = process.env.MINIO_TEST_ENDPOINT ?? "127.0.0.1";
 const port = Number(process.env.MINIO_TEST_PORT ?? "19000");
-const accessKey = process.env.MINIO_TEST_ACCESS_KEY ?? "family_test_access";
-const secretKey = process.env.MINIO_TEST_SECRET_KEY ?? "family_test_secret_local";
+const accessKey = process.env.MINIO_TEST_ACCESS_KEY ?? "family_learning_api";
+const secretKey = process.env.MINIO_TEST_SECRET_KEY ?? "family_test_app_secret_local";
 const publicUrl = process.env.MINIO_TEST_PUBLIC_URL ?? `http://${endpoint}:${port}`;
 const appOrigin = "http://localhost:5173";
 const storage = enabled
@@ -109,5 +110,20 @@ describe.skipIf(!enabled)("MinIO multipart adapter integration", () => {
     multipartUploads.push({ key, uploadId });
     await storage.abortMultipartUpload(key, uploadId);
     await expect(storage.listParts(key, uploadId)).rejects.toThrow();
+  });
+
+  it("does not grant the application credentials MinIO-wide administrative access", async () => {
+    const client = new S3Client({
+      endpoint: publicUrl,
+      region: "us-east-1",
+      forcePathStyle: true,
+      credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+    });
+    try {
+      await expect(client.send(new CreateBucketCommand({ Bucket: `unrelated-${randomUUID()}` })))
+        .rejects.toMatchObject({ $metadata: { httpStatusCode: 403 } });
+    } finally {
+      client.destroy();
+    }
   });
 });

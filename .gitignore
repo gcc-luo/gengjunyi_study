@@ -5,3 +5,8 @@ dist/
 server/src/generated/prisma/
 playwright-report/
 test-results/
+.env
+.env.*
+!.env.example
+!ops/.env.production.example
+ops/.env.production
