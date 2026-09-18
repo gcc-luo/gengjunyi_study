@@ -23,7 +23,7 @@ function RequireAuth() {
   if (auth.status === 'loading') return <main className="auth-loading" role="status">正在检查登录状态…</main>;
   if (auth.status === 'error') return <main className="auth-loading" role="alert">{auth.error ?? '无法检查登录状态'} <button type="button" onClick={() => void auth.refreshSession()}>重试</button></main>;
   if (auth.status !== 'authenticated') {
-    return <main className="auth-loading" role="alert"><p>无法建立免登录会话，请确认服务器已初始化家长管理员账户。</p><Link to="/">返回入口</Link></main>;
+    return <main className="auth-loading" role="alert"><p>暂时无法进入家庭空间，请检查服务运行状态后重试。</p><Link to="/">返回入口</Link></main>;
   }
   return <Outlet />;
 }

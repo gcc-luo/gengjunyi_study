@@ -31,7 +31,7 @@ it('does not show a login form when a private route has no server session', () =
   renderApp('/parent/courses?search=math', anonymousSession);
 
   expect(window.location.pathname).toBe('/parent/courses');
-  expect(screen.getByRole('alert')).toHaveTextContent('请确认服务器已初始化家长管理员账户');
+  expect(screen.getByRole('alert')).toHaveTextContent('请检查服务运行状态后重试');
   expect(screen.queryByRole('heading', { name: '家长登录' })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: '返回入口' })).toHaveAttribute('href', '/');
 });

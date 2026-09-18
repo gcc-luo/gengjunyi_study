@@ -142,7 +142,12 @@ trap on_error ERR
 
 "${compose[@]}" config -q
 "${compose[@]}" up -d --build
-"${compose[@]}" --profile bootstrap run --rm admin
+auth_bypass="${AUTH_BYPASS:-$(read_env_value AUTH_BYPASS)}"
+if [[ "$auth_bypass" == "true" ]]; then
+  echo "AUTH_BYPASS=true; administrator bootstrap is not required."
+else
+  "${compose[@]}" --profile bootstrap run --rm admin
+fi
 
 healthy=false
 for ((attempt = 1; attempt <= 45; attempt++)); do

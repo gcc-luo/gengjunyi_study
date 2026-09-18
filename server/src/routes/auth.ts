@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandl
 import { z } from "zod";
 import type { AppConfig } from "../config.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { bypassAdminEmail, ensureBypassAdmin } from "../auth/admin-provisioning.js";
 import {
   createAnonymousCsrfToken,
   createSessionCsrfToken,
@@ -65,7 +66,10 @@ async function createParentSession(
 
   return {
     authenticated: true,
-    admin: { id: admin.id, email: admin.email },
+    admin: {
+      id: admin.id,
+      email: config.authBypass && admin.email === bypassAdminEmail ? "家庭管理员" : admin.email,
+    },
     activeChildId: null,
     activeChild: null,
     csrfToken: createSessionCsrfToken(config.sessionSecret, session.tokenHash),
@@ -98,16 +102,7 @@ export function registerAuthRoutes(
     const rawToken = request.cookies[config.sessionCookieName];
     const session = await resolveParentSession(prisma, config, rawToken);
     if (!session && config.authBypass) {
-      const admin = await prisma.adminUser.findFirst({
-        orderBy: { createdAt: "asc" },
-        select: { id: true, email: true },
-      });
-      if (!admin) {
-        return reply.code(503).send(errorResponse(
-          "AUTH_BYPASS_UNAVAILABLE",
-          "尚未创建家长管理员，请先完成服务器初始化。",
-        ));
-      }
+      const admin = await ensureBypassAdmin(prisma);
       return createParentSession(prisma, config, reply, admin);
     }
 
@@ -122,7 +117,12 @@ export function registerAuthRoutes(
 
     return {
       authenticated: true,
-      admin: { id: session.adminUser.id, email: session.adminUser.email },
+      admin: {
+        id: session.adminUser.id,
+        email: config.authBypass && session.adminUser.email === bypassAdminEmail
+          ? "家庭管理员"
+          : session.adminUser.email,
+      },
       activeChildId: session.activeChildId,
       activeChild: session.activeChild
         ? { id: session.activeChild.id, name: session.activeChild.name }

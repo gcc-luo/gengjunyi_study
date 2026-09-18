@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
 import { parseConfig } from "../src/config.js";
 import { createPrismaClient } from "../src/db.js";
+import { adminProvisioningLockKey } from "../src/auth/admin-provisioning.js";
 import {
   hashPassword,
   maximumParentPasswordLength,
@@ -13,7 +14,6 @@ import {
 } from "../src/auth/password.js";
 
 const emailSchema = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
-const advisoryLockKey = [1_101_775_188, 1_948_282_209] as const;
 
 export function parseCreateAdminArgs(argv: readonly string[]): { reset: boolean; bootstrap: boolean } {
   if (argv.length === 0) return { reset: false, bootstrap: false };
@@ -46,7 +46,7 @@ export async function provisionAdmin(
   const { email, passwordHash } = await prepareAdminCredentials(input);
   await prisma.$transaction(async (transaction) => {
     await transaction.$queryRaw`
-      SELECT pg_advisory_xact_lock(${advisoryLockKey[0]}, ${advisoryLockKey[1]})
+      SELECT pg_advisory_xact_lock(${adminProvisioningLockKey[0]}, ${adminProvisioningLockKey[1]})
     `;
 
     const admins = await transaction.adminUser.findMany({
@@ -80,7 +80,7 @@ export async function ensureDefaultAdmin(
   const { email, passwordHash } = await prepareAdminCredentials(input);
   return prisma.$transaction(async (transaction) => {
     await transaction.$queryRaw`
-      SELECT pg_advisory_xact_lock(${advisoryLockKey[0]}, ${advisoryLockKey[1]})
+      SELECT pg_advisory_xact_lock(${adminProvisioningLockKey[0]}, ${adminProvisioningLockKey[1]})
     `;
     const admins = await transaction.adminUser.findMany({
       select: { id: true, email: true },

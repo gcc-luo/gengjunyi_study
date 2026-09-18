@@ -183,14 +183,45 @@ describe("parent authentication routes", () => {
     expect(state.sessions).toHaveLength(1);
   });
 
-  it("fails clearly when auth bypass is enabled but no parent admin exists", async () => {
-    const { prisma } = makePrisma();
+  it("creates an internal session identity when bypass is enabled and no admin exists", async () => {
+    const { prisma, state } = makePrisma({
+      children: [{ id: "active-child", name: "Active", status: "ACTIVE" }],
+    });
     app = buildApp({ config: { ...config, authBypass: true }, prisma } as Parameters<typeof buildApp>[0]);
+    app.get("/api/child/session-check", { preHandler: app.requireParent }, async (request) => ({
+      activeChildId: request.parentSession?.activeChildId,
+    }));
 
     const response = await app.inject({ method: "GET", url: "/api/auth/session" });
+    expect(response.statusCode).toBe(200);
+    const rawToken = sessionTokenFrom(response);
+    const activeChild = await app.inject({
+      method: "PUT",
+      url: "/api/auth/active-child",
+      headers: {
+        origin: config.appOrigin,
+        "x-csrf-token": response.json().csrfToken,
+        cookie: `fl_parent_session=${rawToken}`,
+      },
+      payload: { childId: "active-child" },
+    });
+    const childRequest = await app.inject({
+      method: "GET",
+      url: "/api/child/session-check",
+      headers: { cookie: `fl_parent_session=${rawToken}` },
+    });
 
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe("AUTH_BYPASS_UNAVAILABLE");
+    expect(response.json()).toMatchObject({
+      authenticated: true,
+      admin: { email: "家庭管理员" },
+      activeChildId: null,
+    });
+    expect(state.admins).toHaveLength(1);
+    expect(state.admins[0].email).toBe("parent@family.test");
+    expect(state.admins[0].passwordHash).toMatch(/^\$argon2id\$/u);
+    expect(activeChild.statusCode).toBe(200);
+    expect(childRequest.statusCode).toBe(200);
+    expect(childRequest.json()).toEqual({ activeChildId: "active-child" });
   });
 
   it("disables password login while auth bypass is enabled", async () => {
