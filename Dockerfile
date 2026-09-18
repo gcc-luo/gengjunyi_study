@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim AS builder
+ARG DOCKERHUB_PREFIX=docker.io
+
+FROM ${DOCKERHUB_PREFIX}/library/node:22-bookworm-slim AS builder
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -6,7 +8,7 @@ RUN npm ci
 COPY . .
 RUN npm run build && npm run server:build
 
-FROM node:22-bookworm-slim AS api-runtime
+FROM ${DOCKERHUB_PREFIX}/library/node:22-bookworm-slim AS api-runtime
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
@@ -24,7 +26,7 @@ USER node
 EXPOSE 3000
 CMD ["node", "server/dist/index.js"]
 
-FROM nginx:alpine AS web-runtime
+FROM ${DOCKERHUB_PREFIX}/library/nginx:alpine AS web-runtime
 COPY ops/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80

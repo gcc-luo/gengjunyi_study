@@ -1,6 +1,6 @@
 # Ubuntu 局域网一键部署
 
-本方案用于家庭局域网，不需要域名或 Docker 之外的额外宿主机软件。Ubuntu 服务器和手机需连接到彼此可达的同一网络。
+本方案用于家庭局域网，不需要域名或 Docker 之外的额外宿主机软件。Ubuntu 服务器和手机需连接到彼此可达的同一网络。LAN Compose 默认通过 DaoCloud 镜像前缀拉取 Docker Hub 和 Quay 镜像。
 
 ## 首次启动
 
@@ -49,3 +49,7 @@ docker compose --project-name family-learning-lan --env-file .env.lan --file ops
 不要追加 `-v`，否则会删除数据库、视频及 MinIO 初始化状态卷。MinIO 管理控制台和 PostgreSQL 没有发布到宿主机端口。
 
 此部署使用明文 HTTP 和仓库内固定初始密码，仅供可信家庭局域网测试/使用，不能直接暴露到公网。
+
+## 镜像来源
+
+Docker Hub 官方镜像默认通过 `m.daocloud.io/docker.io` 获取，MinIO 镜像通过 `m.daocloud.io/quay.io` 获取。需要更换镜像源时，编辑 `.env.lan` 中的 `DOCKERHUB_PREFIX` 和 `QUAY_PREFIX`，然后再次运行部署脚本。镜像代理服务也可能出现暂时不可用；若拉取仍超时，先分别测试这些域名的网络连通性。

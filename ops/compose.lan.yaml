@@ -18,7 +18,7 @@ x-app-environment: &app-environment
 
 services:
   caddy:
-    image: caddy:2-alpine
+    image: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}/library/caddy:2-alpine
     restart: unless-stopped
     ports:
       - "${BIND_IP:?set BIND_IP}:8080:8080"
@@ -37,6 +37,8 @@ services:
       context: ..
       dockerfile: Dockerfile
       target: web-runtime
+      args:
+        DOCKERHUB_PREFIX: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}
     restart: unless-stopped
     expose:
       - "80"
@@ -48,6 +50,8 @@ services:
       context: ..
       dockerfile: Dockerfile
       target: api-runtime
+      args:
+        DOCKERHUB_PREFIX: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}
     restart: unless-stopped
     environment:
       <<: *app-environment
@@ -74,6 +78,8 @@ services:
       context: ..
       dockerfile: Dockerfile
       target: builder
+      args:
+        DOCKERHUB_PREFIX: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}
     restart: "no"
     environment:
       <<: *app-environment
@@ -89,6 +95,8 @@ services:
       context: ..
       dockerfile: Dockerfile
       target: builder
+      args:
+        DOCKERHUB_PREFIX: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}
     profiles: ["bootstrap"]
     environment:
       <<: *app-environment
@@ -100,7 +108,7 @@ services:
         condition: service_healthy
 
   postgres:
-    image: postgres:17-alpine
+    image: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}/library/postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
@@ -115,7 +123,7 @@ services:
       retries: 12
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ${QUAY_PREFIX:-m.daocloud.io/quay.io}/minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
@@ -135,7 +143,7 @@ services:
       retries: 12
 
   minio-init:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ${QUAY_PREFIX:-m.daocloud.io/quay.io}/minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: "no"
     entrypoint: ["/bin/sh", "/ops/init-minio.sh"]
     environment:
