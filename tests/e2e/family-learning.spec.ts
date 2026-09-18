@@ -252,3 +252,31 @@ test('private family can create, publish, upload and learn with child-isolated p
   await expect(sisterVideo).toContainText('开始学习');
   await expect(sisterVideo).not.toContainText('继续学习');
 });
+
+test('keeps the complete video frame inside a narrow mobile player', async ({ page }) => {
+  await page.setViewportSize({ width: 319, height: 800 });
+  const family = new FamilyApiStub();
+  family.authenticated = true;
+  family.activeChildId = 'child-brother';
+  family.courses = [{
+    id: 'course-mobile', title: '手机播放测试', subjectId: 'science', description: '', ageRange: '6-9岁',
+    cover: { style: 'sunrise', colors: ['#37A7E8', '#B5ECFF'] }, status: 'PUBLISHED',
+    createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-02T00:00:00.000Z',
+    videos: [{ id: 'video-mobile', courseId: 'course-mobile', title: '横屏视频', fileName: 'landscape.mp4', durationMs: 20_000, status: 'READY', sortOrder: 0, createdAt: '2026-09-01T00:00:00.000Z' }],
+  }];
+  await family.install(page);
+
+  await page.goto('/child/watch/video-mobile');
+  await expect(page.locator('video[aria-label="视频播放器"]')).toBeVisible();
+  const dimensions = await page.evaluate(() => ({
+    shellWidth: document.querySelector('.child-shell')!.getBoundingClientRect().width,
+    pageWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+    playerWidth: document.querySelector('.watch-player')!.getBoundingClientRect().width,
+    screenWidth: document.querySelector('.watch-screen-live')!.getBoundingClientRect().width,
+  }));
+
+  expect(dimensions.shellWidth).toBeLessThanOrEqual(dimensions.viewportWidth + 1);
+  expect(dimensions.pageWidth).toBeLessThanOrEqual(dimensions.viewportWidth + 1);
+  expect(dimensions.screenWidth).toBeLessThanOrEqual(dimensions.playerWidth + 1);
+});
