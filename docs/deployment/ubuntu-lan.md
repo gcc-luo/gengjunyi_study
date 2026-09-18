@@ -14,7 +14,7 @@ bash ./ops/deploy-lan.sh
 
 部署成功后脚本会打印访问地址和家长账号：
 
-- 主站：`http://<Ubuntu服务器局域网IP>:8080`
+- 主站：`http://<Ubuntu服务器局域网IP>:8189`
 - 家长账号：`parent@family.test`
 - 初始密码：`FamilyLearningParent2026!`
 - MinIO S3 API：`http://<Ubuntu服务器局域网IP>:9000`（供网页上传和播放使用，不是管理界面）
@@ -29,10 +29,10 @@ BIND_IP=192.168.1.20 bash ./ops/deploy-lan.sh
 
 ## 网络要求
 
-手机必须能路由到 Ubuntu 服务器的局域网 IP。服务器防火墙和 Wi‑Fi 客户端隔离设置需允许设备访问 TCP 8080（网页）和 TCP 9000（MinIO 视频）。例如服务器启用了 UFW 时，可按实际家庭网段放行：
+手机必须能路由到 Ubuntu 服务器的局域网 IP。服务器防火墙和 Wi‑Fi 客户端隔离设置需允许设备访问 TCP 8189（网页）和 TCP 9000（MinIO 视频）。例如服务器启用了 UFW 时，可按实际家庭网段放行：
 
 ```bash
-sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 8189 proto tcp
 sudo ufw allow from 192.168.1.0/24 to any port 9000 proto tcp
 ```
 

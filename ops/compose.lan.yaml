@@ -21,7 +21,7 @@ services:
     image: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}/library/caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "${BIND_IP:?set BIND_IP}:8080:8080"
+      - "${BIND_IP:?set BIND_IP}:8189:8080"
     volumes:
       - ./Caddyfile.lan:/etc/caddy/Caddyfile:ro
     depends_on:

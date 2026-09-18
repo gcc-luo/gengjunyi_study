@@ -16,7 +16,7 @@ Docker Engine and the Docker Compose plugin must already be installed and runnin
 Optional override:
   BIND_IP=192.168.1.20 bash ./ops/deploy-lan.sh
 
-The web app listens on TCP 8080 and MinIO S3 on TCP 9000 at the selected LAN IP.
+The web app listens on TCP 8189 and MinIO S3 on TCP 9000 at the selected LAN IP.
 USAGE
 }
 
@@ -82,7 +82,7 @@ set_env_value() {
 }
 
 set_env_value BIND_IP "$bind_ip"
-set_env_value APP_ORIGIN "http://${bind_ip}:8080"
+set_env_value APP_ORIGIN "http://${bind_ip}:8189"
 set_env_value MINIO_PUBLIC_URL "http://${bind_ip}:9000"
 
 compose=(docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" --file "$COMPOSE_FILE")
@@ -120,13 +120,13 @@ admin_password="$(awk -F= '$1 == "ADMIN_PASSWORD" {sub(/^[^=]*=/, ""); print; ex
 cat <<SUMMARY
 
 Deployment is ready.
-Web:       http://${bind_ip}:8080
+Web:       http://${bind_ip}:8189
 MinIO S3:  http://${bind_ip}:9000 (used by video uploads and playback)
 Admin:     ${admin_email}
 Password:  ${admin_password}
 
 Use the web address on a phone connected to the same LAN. This deployment uses
-plain HTTP and fixed local credentials; do not expose ports 8080/9000 to the public internet.
+plain HTTP and fixed local credentials; do not expose ports 8189/9000 to the public internet.
 The initial admin password is only applied when no admin exists; reruns do not reset it.
 Data is kept in Docker volumes. Do not run 'docker compose down -v' for this project.
 SUMMARY
