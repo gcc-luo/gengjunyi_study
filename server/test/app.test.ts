@@ -54,6 +54,7 @@ const testConfig: AppConfig = {
     publicUrl: "http://localhost:19000",
   },
   appOrigin: "http://localhost:5173",
+  appAllowedOrigins: ["http://localhost:5173"],
   appTimezone: "Asia/Shanghai",
   sessionSecret: "test-session-secret-that-is-long-enough",
 };
@@ -135,7 +136,10 @@ describe("GET /api/health", () => {
 
 describe("parseConfig", () => {
   it("accepts a complete production config and maps its key fields", () => {
-    const config = parseConfig(productionEnv);
+    const config = parseConfig({
+      ...productionEnv,
+      APP_ALLOWED_ORIGINS: "https://learn.example.com,http://localhost:8189,http://127.0.0.1:8189",
+    });
 
     expect(config.nodeEnv).toBe("production");
     expect(config.authBypass).toBe(true);
@@ -150,6 +154,11 @@ describe("parseConfig", () => {
       publicUrl: productionEnv.MINIO_PUBLIC_URL,
     });
     expect(config.appOrigin).toBe(productionEnv.APP_ORIGIN);
+    expect(config.appAllowedOrigins).toEqual([
+      "https://learn.example.com",
+      "http://localhost:8189",
+      "http://127.0.0.1:8189",
+    ]);
     expect(config.trustedProxies).toEqual(["172.30.0.2"]);
     expect(config.sessionSecret).toBe(productionEnv.SESSION_SECRET);
   });
@@ -213,6 +222,13 @@ describe("parseConfig", () => {
 
   it("requires HTTPS for the public application origin in production", () => {
     expect(() => parseConfig({ ...productionEnv, APP_ORIGIN: "http://learn.example.com" })).toThrow();
+  });
+
+  it("requires the configured application origin to be in the allowed origin list", () => {
+    expect(() => parseConfig({
+      ...productionEnv,
+      APP_ALLOWED_ORIGINS: "http://localhost:8189",
+    })).toThrow(/APP_ALLOWED_ORIGINS must include APP_ORIGIN/u);
   });
 
   it.each(["0.0.0.0", "::", "example.com", "172.30.0.2/24"])(

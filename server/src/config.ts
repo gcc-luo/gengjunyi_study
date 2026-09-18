@@ -39,6 +39,10 @@ const appOriginSchema = z.string().url().refine((value) => {
     url.pathname === "/"
   );
 }, "APP_ORIGIN must be an HTTP or HTTPS origin without a path or query");
+const appAllowedOriginsSchema = z.preprocess(
+  (value) => typeof value === "string" ? value.split(",").map((origin) => origin.trim()) : value,
+  z.array(appOriginSchema).optional(),
+);
 
 const environmentSchema = z
   .object({
@@ -57,6 +61,7 @@ const environmentSchema = z
         !url.search && !url.hash && !url.username && !url.password;
     }, "MINIO_PUBLIC_URL must be an HTTP(S) origin without a path or query"),
     APP_ORIGIN: appOriginSchema,
+    APP_ALLOWED_ORIGINS: appAllowedOriginsSchema,
     AUTH_BYPASS: booleanFromEnvironment,
     TRUSTED_PROXIES: trustedProxiesSchema,
     APP_TIMEZONE: z.string().min(1).refine((value) => {
@@ -70,6 +75,13 @@ const environmentSchema = z
     SESSION_SECRET: z.string().min(1),
   })
   .superRefine((config, context) => {
+    if (config.APP_ALLOWED_ORIGINS && !config.APP_ALLOWED_ORIGINS.includes(config.APP_ORIGIN)) {
+      context.addIssue({
+        code: "custom",
+        path: ["APP_ALLOWED_ORIGINS"],
+        message: "APP_ALLOWED_ORIGINS must include APP_ORIGIN",
+      });
+    }
     if (config.NODE_ENV === "production" && config.TRUSTED_PROXIES.length === 0) {
       context.addIssue({
         code: "custom",
@@ -118,6 +130,7 @@ const environmentSchema = z
       publicUrl: config.MINIO_PUBLIC_URL,
     },
     appOrigin: config.APP_ORIGIN,
+    appAllowedOrigins: config.APP_ALLOWED_ORIGINS ?? [config.APP_ORIGIN],
     trustedProxies: config.TRUSTED_PROXIES,
     appTimezone: config.APP_TIMEZONE,
     sessionSecret: config.SESSION_SECRET,

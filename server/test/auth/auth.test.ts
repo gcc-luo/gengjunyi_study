@@ -32,6 +32,7 @@ const config: AppConfig = {
     publicUrl: "http://localhost:19000",
   },
   appOrigin: "http://localhost:5173",
+  appAllowedOrigins: ["http://localhost:5173"],
   appTimezone: "Asia/Shanghai",
   sessionSecret: "test-session-secret-that-is-long-enough",
 };
@@ -294,6 +295,7 @@ describe("parent authentication routes", () => {
       ...config,
       nodeEnv: "production" as const,
       appOrigin: "https://learn.example.com",
+      appAllowedOrigins: ["https://learn.example.com"],
       secureCookies: true,
     };
     const { prisma } = makePrisma({ admins: [await createAdmin()] });
@@ -332,6 +334,26 @@ describe("parent authentication routes", () => {
     expect(missingCsrf.statusCode).toBe(403);
     expect(wrongOrigin.statusCode).toBe(403);
     expect(missingCsrf.json().error.code).toBe("CSRF_INVALID");
+  });
+
+  it("accepts writes from an explicitly configured localhost origin", async () => {
+    const { prisma } = makePrisma({ admins: [await createAdmin()] });
+    const localhostConfig = {
+      ...config,
+      appAllowedOrigins: [config.appOrigin, "http://localhost:8189"],
+    } as unknown as AppConfig;
+    app = buildApp({ config: localhostConfig, prisma } as Parameters<typeof buildApp>[0]);
+    const csrfToken = (await app.inject({ method: "GET", url: "/api/auth/session" })).json().csrfToken;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: { origin: "http://localhost:8189", "x-csrf-token": csrfToken },
+      payload: { email: "parent@example.com", password: "correct horse battery staple" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().authenticated).toBe(true);
   });
 
   it("revokes the database session immediately on logout", async () => {

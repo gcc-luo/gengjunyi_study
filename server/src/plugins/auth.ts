@@ -152,7 +152,7 @@ export function installAuthProtection(
 
   app.addHook("preHandler", async (request, reply) => {
     if (request.is404 || !isWriteRequest(request)) return;
-    if (request.headers.origin !== config.appOrigin) return csrfError(reply);
+    if (!config.appAllowedOrigins.includes(request.headers.origin ?? "")) return csrfError(reply);
 
     const session = await resolveParentSession(
       prisma,

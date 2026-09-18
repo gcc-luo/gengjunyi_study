@@ -33,6 +33,7 @@ export const config: AppConfig = {
     publicUrl: "http://localhost:19000",
   },
   appOrigin: "http://localhost:5173",
+  appAllowedOrigins: ["http://localhost:5173"],
   appTimezone: "Asia/Shanghai",
   sessionSecret: "test-session-secret-that-is-long-enough",
 };

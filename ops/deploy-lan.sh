@@ -18,7 +18,10 @@ Optional override:
   APP_ORIGIN=http://123.57.228.45:8189 \
   MINIO_PUBLIC_URL=http://123.57.228.45:9000 bash ./ops/deploy-lan.sh
 
-The web app listens on TCP 8189 and MinIO S3 on TCP 9000 at the selected LAN IP.
+By default, TCP 8189 (web) and 9000 (MinIO S3) listen on all interfaces (0.0.0.0),
+so localhost and LAN clients can connect. Client URLs use the LAN IP discovered
+from the default route; reserve that IP in your router for a stable address.
+Set BIND_IP to a specific local IPv4 to restrict listening.
 APP_ORIGIN and MINIO_PUBLIC_URL can be overridden for an HTTP tunnel/public endpoint.
 USAGE
 }
@@ -63,9 +66,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
   chmod 600 "$ENV_FILE"
 fi
 
-bind_ip="${BIND_IP:-$(discover_bind_ip)}"
-if [[ -z "$bind_ip" ]] || ! ip -4 -o addr show | awk '{split($4, address, "/"); print address[1]}' | grep -Fxq "$bind_ip"; then
-  printf 'Could not select a local IPv4 address (selected: %s). Set BIND_IP to this server\x27s LAN IPv4 and rerun.\n' "${bind_ip:-none}" >&2
+host_ip="$(discover_bind_ip)"
+bind_ip="${BIND_IP:-0.0.0.0}"
+if [[ -z "$host_ip" ]]; then
+  printf 'Could not discover a local IPv4 address. Set APP_ORIGIN and MINIO_PUBLIC_URL to reachable URLs and rerun.\n' >&2
+  exit 1
+fi
+if [[ "$bind_ip" != "0.0.0.0" ]] && ! ip -4 -o addr show | awk '{split($4, address, "/"); print address[1]}' | grep -Fxq "$bind_ip"; then
+  printf 'BIND_IP must be 0.0.0.0 or a local IPv4 address (selected: %s).\n' "${bind_ip:-none}" >&2
   exit 1
 fi
 
@@ -90,18 +98,34 @@ read_env_value() {
 }
 
 previous_bind_ip="$(read_env_value BIND_IP)"
+previous_host_ip="$(read_env_value LAN_HOST_IP)"
+if [[ -z "$previous_host_ip" && "$previous_bind_ip" != "0.0.0.0" ]]; then
+  previous_host_ip="$previous_bind_ip"
+fi
+previous_app_origin="$(read_env_value APP_ORIGIN)"
+previous_app_allowed_origins="$(read_env_value APP_ALLOWED_ORIGINS)"
+previous_managed_origins="${previous_app_origin},http://localhost:8189,http://127.0.0.1:8189"
 app_origin="${APP_ORIGIN:-$(read_env_value APP_ORIGIN)}"
 minio_public_url="${MINIO_PUBLIC_URL:-$(read_env_value MINIO_PUBLIC_URL)}"
 
-if [[ -z "$app_origin" || "$app_origin" == "http://127.0.0.1:8189" || "$app_origin" == "http://${previous_bind_ip}:8189" ]]; then
-  app_origin="http://${bind_ip}:8189"
+if [[ -z "$app_origin" || "$app_origin" == "http://127.0.0.1:8189" || "$app_origin" == "http://${previous_host_ip}:8189" ]]; then
+  app_origin="http://${host_ip}:8189"
 fi
-if [[ -z "$minio_public_url" || "$minio_public_url" == "http://127.0.0.1:9000" || "$minio_public_url" == "http://${previous_bind_ip}:9000" ]]; then
-  minio_public_url="http://${bind_ip}:9000"
+if [[ -z "$minio_public_url" || "$minio_public_url" == "http://127.0.0.1:9000" || "$minio_public_url" == "http://${previous_host_ip}:9000" ]]; then
+  minio_public_url="http://${host_ip}:9000"
+fi
+if [[ -n "${APP_ALLOWED_ORIGINS:-}" ]]; then
+  app_allowed_origins="$APP_ALLOWED_ORIGINS"
+elif [[ -z "$previous_app_allowed_origins" || "$previous_app_allowed_origins" == "$previous_managed_origins" || "$previous_app_allowed_origins" == "$previous_app_origin" ]]; then
+  app_allowed_origins="${app_origin},http://localhost:8189,http://127.0.0.1:8189"
+else
+  app_allowed_origins="$previous_app_allowed_origins"
 fi
 
 set_env_value BIND_IP "$bind_ip"
+set_env_value LAN_HOST_IP "$host_ip"
 set_env_value APP_ORIGIN "$app_origin"
+set_env_value APP_ALLOWED_ORIGINS "$app_allowed_origins"
 set_env_value MINIO_PUBLIC_URL "$minio_public_url"
 
 compose=(docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" --file "$COMPOSE_FILE")
