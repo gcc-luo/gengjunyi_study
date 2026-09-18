@@ -57,6 +57,7 @@ const environmentSchema = z
         !url.search && !url.hash && !url.username && !url.password;
     }, "MINIO_PUBLIC_URL must be an HTTP(S) origin without a path or query"),
     APP_ORIGIN: appOriginSchema,
+    AUTH_BYPASS: booleanFromEnvironment,
     TRUSTED_PROXIES: trustedProxiesSchema,
     APP_TIMEZONE: z.string().min(1).refine((value) => {
       try {
@@ -105,6 +106,7 @@ const environmentSchema = z
     sessionCookieName: "fl_parent_session",
     sessionLifetimeSeconds: 7 * 24 * 60 * 60,
     secureCookies: config.NODE_ENV === "production",
+    authBypass: config.AUTH_BYPASS,
     databaseUrl: config.DATABASE_URL,
     minio: {
       endpoint: config.MINIO_ENDPOINT,
@@ -127,6 +129,7 @@ const sharedDefaults = {
   NODE_ENV: "development",
   PORT: "3000",
   APP_TIMEZONE: "Asia/Shanghai",
+  AUTH_BYPASS: "true",
 };
 
 const developmentDefaults = {

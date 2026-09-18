@@ -19,6 +19,7 @@ export const config: AppConfig = {
   sessionCookieName: "fl_parent_session",
   sessionLifetimeSeconds: 7 * 24 * 60 * 60,
   secureCookies: false,
+  authBypass: false,
   databaseUrl:
     "postgresql://family_learning_test:family_learning_test_local_only@127.0.0.1:15432/family_learning_test",
   trustedProxies: [],

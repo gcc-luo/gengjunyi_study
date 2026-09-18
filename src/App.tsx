@@ -1,4 +1,4 @@
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { ParentShell } from './components/ParentShell';
 import { ChildShell } from './components/ChildShell';
 import { OverviewPage } from './features/parent/OverviewPage';
@@ -17,16 +17,13 @@ import { WatchPage } from './features/child/WatchPage';
 import { RecordsPage as ChildRecordsPage } from './features/child/RecordsPage';
 import { useAppStore } from './context/AppStore';
 import { useAuth } from './context/AuthProvider';
-import { LoginPage } from './features/auth/LoginPage';
 
 function RequireAuth() {
   const auth = useAuth();
-  const location = useLocation();
   if (auth.status === 'loading') return <main className="auth-loading" role="status">正在检查登录状态…</main>;
   if (auth.status === 'error') return <main className="auth-loading" role="alert">{auth.error ?? '无法检查登录状态'} <button type="button" onClick={() => void auth.refreshSession()}>重试</button></main>;
   if (auth.status !== 'authenticated') {
-    const next = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
+    return <main className="auth-loading" role="alert"><p>无法建立免登录会话，请确认服务器已初始化家长管理员账户。</p><Link to="/">返回入口</Link></main>;
   }
   return <Outlet />;
 }
@@ -61,7 +58,7 @@ function LandingPage() {
           </section>
 
           <nav className="landing-entries" aria-label="选择学习空间">
-            <Link className="landing-entry-card landing-child-entry" to="/login?next=%2Fchild%2Fselect">
+            <Link className="landing-entry-card landing-child-entry" to="/child/select">
               <span className="landing-entry-icon" aria-hidden="true">🚀</span>
               <span className="landing-entry-copy">
                 <span className="landing-entry-kicker">给孩子的学习空间</span>
@@ -74,7 +71,7 @@ function LandingPage() {
               </span>
             </Link>
 
-            <Link className="landing-entry-card landing-parent-entry" to="/login?next=%2Fparent%2Foverview">
+            <Link className="landing-entry-card landing-parent-entry" to="/parent/overview">
               <span className="landing-entry-icon" aria-hidden="true">📚</span>
               <span className="landing-entry-copy">
                 <span className="landing-entry-kicker">家庭内容管理</span>
@@ -113,7 +110,7 @@ export default function App() {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
         <Route element={<RequireAuth />}>
           <Route path="/parent" element={<ParentShell />}>
             <Route index element={<OverviewPage />} />

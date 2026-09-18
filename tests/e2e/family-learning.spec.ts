@@ -25,7 +25,7 @@ class FamilyApiStub {
   ];
   courses: CourseRecord[] = [];
   activeChildId: string | null = null;
-  authenticated = false;
+  authenticated = true;
   readonly uploads = new Map<string, { courseId: string; fileName: string; sizeBytes: number; partSizeBytes: number; uploaded: boolean }>();
   readonly progress = new Map<string, { positionMs: number; maxProgressPercent: number; completed: boolean; updatedAt: string }>();
   readonly events: Array<{ id: string; childId: string; videoId: string; effectiveWatchSeconds: number; occurredAt: string }> = [];
@@ -84,8 +84,6 @@ class FamilyApiStub {
     const json = (value: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
 
     if (url.pathname === '/api/auth/session' && method === 'GET') return json(this.session());
-    if (url.pathname === '/api/auth/login' && method === 'POST') { this.authenticated = true; return json(this.session()); }
-    if (url.pathname === '/api/auth/logout' && method === 'POST') { this.authenticated = false; this.activeChildId = null; return route.fulfill({ status: 204 }); }
     if (url.pathname === '/api/auth/active-child' && method === 'PUT') {
       this.activeChildId = String(body.childId);
       const child = this.children.find((item) => item.id === this.activeChildId);
@@ -195,15 +193,18 @@ class FamilyApiStub {
   }
 }
 
-test('private family can create, publish, upload and learn with child-isolated progress', async ({ page }) => {
+test('family can enter directly, manage and learn with child-isolated progress', async ({ page }) => {
   const family = new FamilyApiStub();
   await family.install(page);
 
-  await page.goto('/parent/overview');
-  await expect(page.getByRole('heading', { name: '家长登录' })).toBeVisible();
-  await page.getByLabel('邮箱').fill('parent@example.test');
-  await page.getByLabel('密码').fill('test-only-password');
-  await page.getByRole('button', { name: '登录' }).click();
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: /儿童学习空间/ })).toHaveAttribute('href', '/child/select');
+  await expect(page.getByRole('link', { name: /家长管理中心/ })).toHaveAttribute('href', '/parent/overview');
+  await page.getByRole('link', { name: /儿童学习空间/ }).click();
+  await expect(page.getByRole('heading', { name: '谁来学习？' })).toBeVisible();
+
+  await page.goto('/');
+  await page.getByRole('link', { name: /家长管理中心/ }).click();
   await expect(page.getByRole('heading', { name: '概览' })).toBeVisible();
 
   await page.goto('/parent/courses?new=1');

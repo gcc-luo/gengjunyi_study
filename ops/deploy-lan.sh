@@ -133,20 +133,16 @@ if [[ "$healthy" != true ]]; then
   exit 1
 fi
 
-admin_email="$(awk -F= '$1 == "ADMIN_EMAIL" {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE")"
-admin_password="$(awk -F= '$1 == "ADMIN_PASSWORD" {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE")"
-
 cat <<SUMMARY
 
 Deployment is ready.
 Web:       ${app_origin}
 MinIO S3:  ${minio_public_url} (used by video uploads and playback)
-Admin:     ${admin_email}
-Password:  ${admin_password}
+Access:    Login disabled; every visitor has full parent-management access.
 
 Use the web address on a phone connected to the same LAN or through your configured tunnel.
-This deployment uses plain HTTP and fixed local credentials; public exposure sends passwords
-and session cookies without TLS encryption.
-The initial admin password is only applied when no admin exists; reruns do not reset it.
+This deployment uses plain HTTP and disables authentication. Anyone who can reach the address
+can manage children, courses, uploads, and learning records. The bootstrap admin account is
+only used to create application sessions; reruns do not reset its password.
 Data is kept in Docker volumes. Do not run 'docker compose down -v' for this project.
 SUMMARY

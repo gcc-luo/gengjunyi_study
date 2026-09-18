@@ -19,8 +19,6 @@ type AuthContextValue = {
   session: AuthSession | null;
   error: string | null;
   refreshSession: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
   setActiveChild: (childId: string) => Promise<void>;
 };
 
@@ -62,25 +60,6 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const session = await apiRequest<AuthSession>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    queryClient.clear();
-    setState(stateFromSession(session));
-  }, []);
-
-  const logout = useCallback(async () => {
-    try {
-      await apiRequest('/api/auth/logout', { method: 'POST' });
-    } finally {
-      setCsrfToken(null);
-      queryClient.clear();
-      setState({ status: 'unauthenticated', session: null, error: null });
-    }
-  }, []);
-
   const setActiveChild = useCallback(async (childId: string) => {
     const result = await apiRequest<{ activeChildId: string; activeChild: { id: string; name: string } }>(
       '/api/auth/active-child', { method: 'PUT', body: JSON.stringify({ childId }) },
@@ -94,10 +73,8 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
   const value = useMemo<AuthContextValue>(() => ({
     ...state,
     refreshSession,
-    login,
-    logout,
     setActiveChild,
-  }), [state, refreshSession, login, logout, setActiveChild]);
+  }), [state, refreshSession, setActiveChild]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

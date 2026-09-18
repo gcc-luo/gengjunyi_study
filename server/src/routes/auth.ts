@@ -42,6 +42,36 @@ function errorResponse(code: string, message: string) {
   return { error: { code, message } };
 }
 
+async function createParentSession(
+  prisma: PrismaClient,
+  config: AppConfig,
+  reply: FastifyReply,
+  admin: { id: string; email: string },
+) {
+  const rawToken = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + config.sessionLifetimeSeconds * 1000);
+  const session = await prisma.session.create({
+    data: { adminUserId: admin.id, tokenHash, expiresAt },
+  });
+
+  reply.setCookie(config.sessionCookieName, rawToken, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: config.secureCookies,
+    maxAge: config.sessionLifetimeSeconds,
+  });
+
+  return {
+    authenticated: true,
+    admin: { id: admin.id, email: admin.email },
+    activeChildId: null,
+    activeChild: null,
+    csrfToken: createSessionCsrfToken(config.sessionSecret, session.tokenHash),
+  };
+}
+
 function accountRateLimitKey(request: FastifyRequest, config: AppConfig): string {
   const body = request.body;
   const email =
@@ -67,6 +97,20 @@ export function registerAuthRoutes(
   app.get("/api/auth/session", async (request, reply) => {
     const rawToken = request.cookies[config.sessionCookieName];
     const session = await resolveParentSession(prisma, config, rawToken);
+    if (!session && config.authBypass) {
+      const admin = await prisma.adminUser.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { id: true, email: true },
+      });
+      if (!admin) {
+        return reply.code(503).send(errorResponse(
+          "AUTH_BYPASS_UNAVAILABLE",
+          "尚未创建家长管理员，请先完成服务器初始化。",
+        ));
+      }
+      return createParentSession(prisma, config, reply, admin);
+    }
+
     if (!session) {
       if (rawToken) reply.clearCookie(config.sessionCookieName, { path: "/", sameSite: "lax" });
       return {
@@ -93,6 +137,9 @@ export function registerAuthRoutes(
       preHandler: loginIpLimit,
     },
     async (request, reply) => {
+      if (config.authBypass) {
+        return reply.code(404).send(errorResponse("LOGIN_DISABLED", "Password login is disabled"));
+      }
       const parsed = loginBodySchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send(errorResponse("BAD_REQUEST", "Email and password are required"));
@@ -107,28 +154,7 @@ export function registerAuthRoutes(
         );
       }
 
-      const rawToken = randomBytes(32).toString("base64url");
-      const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-      const expiresAt = new Date(Date.now() + config.sessionLifetimeSeconds * 1000);
-      const session = await prisma.session.create({
-        data: { adminUserId: admin.id, tokenHash, expiresAt },
-      });
-
-      reply.setCookie(config.sessionCookieName, rawToken, {
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-        secure: config.secureCookies,
-        maxAge: config.sessionLifetimeSeconds,
-      });
-
-      return reply.code(200).send({
-        authenticated: true,
-        admin: { id: admin.id, email: admin.email },
-        activeChildId: null,
-        activeChild: null,
-        csrfToken: createSessionCsrfToken(config.sessionSecret, session.tokenHash),
-      });
+      return reply.code(200).send(await createParentSession(prisma, config, reply, admin));
     },
   );
 

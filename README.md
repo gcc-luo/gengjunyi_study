@@ -4,7 +4,7 @@
 
 ## 当前能力
 
-- Argon2id 家长密码、HttpOnly/Secure 会话 Cookie、登录限速与 CSRF/来源校验；首次管理员由服务器 CLI 创建，不提供公开注册。
+- 单家庭管理员数据模型、HttpOnly 会话 Cookie 与 CSRF/来源校验；当前默认启用全局免登录，任何能访问站点的人都拥有家长管理权限，不提供公开注册。
 - 多孩子档案、课程草稿/发布/下架、目录排序、服务端学习记录与存储配额。
 - 浏览器向 MinIO 进行 MP4 分片直传，展示真实进度，支持失败续传；刷新后重新选择同名同大小源文件继续。
 - H.264/AAC MP4 服务端校验；私有对象经授权后以短时签名链接播放，支持 HTTP Range、断点续看、90% 完成判定。
@@ -48,7 +48,7 @@ npm run server:dev
 npm run dev
 ```
 
-访问 <http://localhost:5173>。开发环境不使用真实家庭资料或正式凭据；使用前面通过 `npm run admin:create` 创建的管理员账户登录。
+访问 <http://localhost:5173>。开发环境不使用真实家庭资料或正式凭据；首次通过 `/api/auth/session` 自动使用 `npm run admin:create` 创建的管理员建立免登录会话。需要恢复密码登录时，需同时关闭 `AUTH_BYPASS` 并恢复登录界面。
 
 ## 验证
 

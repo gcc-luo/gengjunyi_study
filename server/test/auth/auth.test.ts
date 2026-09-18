@@ -5,6 +5,7 @@ import type { PrismaClient } from "../../src/generated/prisma/client";
 import { buildApp } from "../../src/app";
 import type { AppConfig } from "../../src/config";
 import { hashPassword } from "../../src/auth/password";
+import { createAnonymousCsrfToken } from "../../src/plugins/auth";
 import {
   parseCreateAdminArgs,
   provisionAdmin,
@@ -17,6 +18,7 @@ const config: AppConfig = {
   sessionCookieName: "fl_parent_session",
   sessionLifetimeSeconds: 7 * 24 * 60 * 60,
   secureCookies: false,
+  authBypass: false,
   databaseUrl:
     "postgresql://family_learning_test:family_learning_test_local_only@127.0.0.1:15432/family_learning_test",
   trustedProxies: [],
@@ -54,6 +56,7 @@ function makePrisma({ admins = [], children = [] }: { admins?: Admin[]; children
         ) ?? null,
       ),
       findMany: vi.fn(async () => [...state.admins]),
+      findFirst: vi.fn(async () => state.admins[0] ?? null),
       count: vi.fn(async () => state.admins.length),
       create: vi.fn(async ({ data }: { data: Omit<Admin, "id"> }) => {
         const admin = { id: `admin-${state.admins.length + 1}`, ...data };
@@ -139,6 +142,71 @@ describe("parent authentication routes", () => {
     expect(response.json()).toMatchObject({ authenticated: false, activeChildId: null });
     expect(response.json().csrfToken).toEqual(expect.any(String));
     expect(response.json().csrfToken.length).toBeGreaterThan(20);
+  });
+
+  it("creates a normal parent session automatically when auth bypass is enabled", async () => {
+    const { prisma, state } = makePrisma({
+      admins: [await createAdmin()],
+      children: [{ id: "active-child", name: "Active", status: "ACTIVE" }],
+    });
+    app = buildApp({ config: { ...config, authBypass: true }, prisma } as Parameters<typeof buildApp>[0]);
+
+    const response = await app.inject({ method: "GET", url: "/api/auth/session" });
+    const rawToken = sessionTokenFrom(response);
+    const session = await app.inject({
+      method: "GET",
+      url: "/api/auth/session",
+      headers: { cookie: `fl_parent_session=${rawToken}` },
+    });
+    const activeChild = await app.inject({
+      method: "PUT",
+      url: "/api/auth/active-child",
+      headers: {
+        origin: config.appOrigin,
+        "x-csrf-token": response.json().csrfToken,
+        cookie: `fl_parent_session=${rawToken}`,
+      },
+      payload: { childId: "active-child" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      authenticated: true,
+      admin: { id: "admin-1", email: "parent@example.com" },
+      activeChildId: null,
+      csrfToken: expect.any(String),
+    });
+    expect(session.json()).toMatchObject({ authenticated: true, admin: { id: "admin-1" } });
+    expect(activeChild.statusCode).toBe(200);
+    expect(activeChild.json()).toMatchObject({ activeChildId: "active-child" });
+    expect(state.sessions).toHaveLength(1);
+  });
+
+  it("fails clearly when auth bypass is enabled but no parent admin exists", async () => {
+    const { prisma } = makePrisma();
+    app = buildApp({ config: { ...config, authBypass: true }, prisma } as Parameters<typeof buildApp>[0]);
+
+    const response = await app.inject({ method: "GET", url: "/api/auth/session" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe("AUTH_BYPASS_UNAVAILABLE");
+  });
+
+  it("disables password login while auth bypass is enabled", async () => {
+    const { prisma } = makePrisma({ admins: [await createAdmin()] });
+    app = buildApp({ config: { ...config, authBypass: true }, prisma } as Parameters<typeof buildApp>[0]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: {
+        origin: config.appOrigin,
+        "x-csrf-token": createAnonymousCsrfToken(config.sessionSecret),
+      },
+      payload: { email: "parent@example.com", password: "correct horse battery staple" },
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 
   it("does not expose a public registration route", async () => {

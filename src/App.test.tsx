@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 import App from './App';
 import { AuthProvider, type AuthSession } from './context/AuthProvider';
@@ -18,55 +18,40 @@ function renderApp(path = '/', session = authenticatedSession) {
   return render(<AuthProvider initialSession={session}><AppStoreProvider initialSnapshot={createSeedSnapshot()}><App /></AppStoreProvider></AuthProvider>);
 }
 
-it('renders the two role-based landing entries with their existing destinations', () => {
+it('renders two direct role-based entries without a login step', () => {
   renderApp('/');
 
   expect(screen.getByRole('heading', { name: /陪伴每一次\s*小小的进步/ })).toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: '选择学习空间' })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /儿童学习空间/ })).toHaveAttribute('href', '/login?next=%2Fchild%2Fselect');
-  expect(screen.getByRole('link', { name: /家长管理中心/ })).toHaveAttribute('href', '/login?next=%2Fparent%2Foverview');
+  expect(screen.getByRole('link', { name: /儿童学习空间/ })).toHaveAttribute('href', '/child/select');
+  expect(screen.getByRole('link', { name: /家长管理中心/ })).toHaveAttribute('href', '/parent/overview');
 });
 
-it('redirects private pages to login while preserving a safe in-app return target', async () => {
+it('does not show a login form when a private route has no server session', () => {
   renderApp('/parent/courses?search=math', anonymousSession);
 
-  await waitFor(() => expect(window.location.pathname).toBe('/login'));
-  expect(screen.getByRole('heading', { name: '家长登录' })).toBeInTheDocument();
-  expect(new URLSearchParams(window.location.search).get('next')).toBe('/parent/courses?search=math');
+  expect(window.location.pathname).toBe('/parent/courses');
+  expect(screen.getByRole('alert')).toHaveTextContent('请确认服务器已初始化家长管理员账户');
+  expect(screen.queryByRole('heading', { name: '家长登录' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '返回入口' })).toHaveAttribute('href', '/');
 });
 
-it('returns the parent to the selected destination after successful login', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(authenticatedSession), { status: 200 })));
-  renderApp('/login?next=%2Fparent%2Foverview', anonymousSession);
+it('redirects the retired login address back to the two-entry landing page', () => {
+  renderApp('/login?next=%2Fparent%2Foverview');
 
-  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'parent@example.com' } });
-  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'correct-password' } });
-  fireEvent.click(screen.getByRole('button', { name: '登录' }));
-
-  await waitFor(() => expect(window.location.pathname).toBe('/parent/overview'));
-  expect(await screen.findByRole('heading', { name: '概览' })).toBeInTheDocument();
+  expect(window.location.pathname).toBe('/');
+  expect(screen.getByRole('navigation', { name: '选择学习空间' })).toBeInTheDocument();
 });
 
-it('rejects an external post-login redirect target', async () => {
-  renderApp('/login?next=https%3A%2F%2Fevil.example%2Fsteal', anonymousSession);
+it('opens the child selection page directly with an authenticated server session', () => {
+  renderApp('/child/select');
 
-  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'parent@example.com' } });
-  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'correct-password' } });
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(authenticatedSession), { status: 200 })));
-  fireEvent.click(screen.getByRole('button', { name: '登录' }));
-
-  await waitFor(() => expect(window.location.pathname).toBe('/parent/overview'));
-  expect(window.location.origin).toBe('http://localhost:3000');
+  expect(screen.getByRole('heading', { name: '谁来学习？' })).toBeInTheDocument();
 });
 
-it('returns the child entry to child selection after successful login', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(authenticatedSession), { status: 200 })));
-  renderApp('/login?next=%2Fchild%2Fselect', anonymousSession);
+it('opens the parent workbench directly without a logout control', () => {
+  renderApp('/parent/overview');
 
-  fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'parent@example.com' } });
-  fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'correct-password' } });
-  fireEvent.click(screen.getByRole('button', { name: '登录' }));
-
-  await waitFor(() => expect(window.location.pathname).toBe('/child/select'));
-  expect(await screen.findByRole('heading', { name: '谁来学习？' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '概览' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '退出登录' })).not.toBeInTheDocument();
 });

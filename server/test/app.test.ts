@@ -40,6 +40,7 @@ const testConfig: AppConfig = {
   sessionCookieName: "fl_parent_session",
   sessionLifetimeSeconds: 7 * 24 * 60 * 60,
   secureCookies: false,
+  authBypass: false,
   databaseUrl:
     "postgresql://family_learning_test:family_learning_test_local_only@127.0.0.1:15432/family_learning_test",
   trustedProxies: [],
@@ -137,6 +138,7 @@ describe("parseConfig", () => {
     const config = parseConfig(productionEnv);
 
     expect(config.nodeEnv).toBe("production");
+    expect(config.authBypass).toBe(true);
     expect(config.databaseUrl).toBe(productionEnv.DATABASE_URL);
     expect(config.minio).toEqual({
       endpoint: productionEnv.MINIO_ENDPOINT,
@@ -166,6 +168,7 @@ describe("parseConfig", () => {
     expect(config.minio.bucket).toBe("family-learning-videos");
     expect(config.appTimezone).toBe("Asia/Shanghai");
     expect(config.appOrigin).toBe("http://localhost:5173");
+    expect(config.authBypass).toBe(true);
     expect(config.databaseUrl).toBe(
       "postgresql://family_learning:family_learning_dev@localhost:5432/family_learning",
     );
@@ -175,6 +178,10 @@ describe("parseConfig", () => {
 
   it("does not default credential secrets in any environment", () => {
     expect(() => parseConfig({ NODE_ENV: "development" })).toThrow();
+  });
+
+  it("allows disabling auth bypass explicitly", () => {
+    expect(parseConfig({ ...productionEnv, AUTH_BYPASS: "false" }).authBypass).toBe(false);
   });
 
   it("requires database, MinIO, origin, and session settings in production", () => {

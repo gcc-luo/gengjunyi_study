@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth, type AuthSession } from './AuthProvider';
+import { AUTH_UNAUTHORIZED_EVENT } from '../lib/api-client';
 import { queryClient } from '../lib/query-client';
 
 const authenticatedSession: AuthSession = {
@@ -14,10 +15,7 @@ const anonymousSession: AuthSession = { authenticated: false, activeChildId: nul
 
 function Probe() {
   const auth = useAuth();
-  return <div>
-    <output data-testid="state">{auth.status}</output>
-    <button type="button" onClick={() => void auth.logout()}>sign out</button>
-  </div>;
+  return <output data-testid="state">{auth.status}</output>;
 }
 
 describe('AuthProvider', () => {
@@ -33,12 +31,11 @@ describe('AuthProvider', () => {
     expect(fetch).toHaveBeenCalledWith('/api/auth/session', expect.objectContaining({ credentials: 'same-origin' }));
   });
 
-  it('clears cached private data and CSRF state after logout', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+  it('clears cached private data and CSRF state after an unauthorized response', async () => {
     queryClient.setQueryData(['private', 'children'], [{ id: 'child-1' }]);
 
     render(<AuthProvider initialSession={authenticatedSession}><Probe /></AuthProvider>);
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'sign out' })); });
+    await act(async () => { window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT)); });
 
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('unauthenticated'));
     expect(queryClient.getQueryData(['private', 'children'])).toBeUndefined();
