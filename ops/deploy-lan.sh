@@ -15,8 +15,11 @@ Docker Engine and the Docker Compose plugin must already be installed and runnin
 
 Optional override:
   BIND_IP=192.168.1.20 bash ./ops/deploy-lan.sh
+  APP_ORIGIN=http://123.57.228.45:8189 \
+  MINIO_PUBLIC_URL=http://123.57.228.45:9000 bash ./ops/deploy-lan.sh
 
 The web app listens on TCP 8189 and MinIO S3 on TCP 9000 at the selected LAN IP.
+APP_ORIGIN and MINIO_PUBLIC_URL can be overridden for an HTTP tunnel/public endpoint.
 USAGE
 }
 
@@ -81,9 +84,25 @@ set_env_value() {
   mv -- "$temporary_file" "$ENV_FILE"
 }
 
+read_env_value() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$ENV_FILE"
+}
+
+previous_bind_ip="$(read_env_value BIND_IP)"
+app_origin="${APP_ORIGIN:-$(read_env_value APP_ORIGIN)}"
+minio_public_url="${MINIO_PUBLIC_URL:-$(read_env_value MINIO_PUBLIC_URL)}"
+
+if [[ -z "$app_origin" || "$app_origin" == "http://127.0.0.1:8189" || "$app_origin" == "http://${previous_bind_ip}:8189" ]]; then
+  app_origin="http://${bind_ip}:8189"
+fi
+if [[ -z "$minio_public_url" || "$minio_public_url" == "http://127.0.0.1:9000" || "$minio_public_url" == "http://${previous_bind_ip}:9000" ]]; then
+  minio_public_url="http://${bind_ip}:9000"
+fi
+
 set_env_value BIND_IP "$bind_ip"
-set_env_value APP_ORIGIN "http://${bind_ip}:8189"
-set_env_value MINIO_PUBLIC_URL "http://${bind_ip}:9000"
+set_env_value APP_ORIGIN "$app_origin"
+set_env_value MINIO_PUBLIC_URL "$minio_public_url"
 
 compose=(docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" --file "$COMPOSE_FILE")
 
@@ -120,13 +139,14 @@ admin_password="$(awk -F= '$1 == "ADMIN_PASSWORD" {sub(/^[^=]*=/, ""); print; ex
 cat <<SUMMARY
 
 Deployment is ready.
-Web:       http://${bind_ip}:8189
-MinIO S3:  http://${bind_ip}:9000 (used by video uploads and playback)
+Web:       ${app_origin}
+MinIO S3:  ${minio_public_url} (used by video uploads and playback)
 Admin:     ${admin_email}
 Password:  ${admin_password}
 
-Use the web address on a phone connected to the same LAN. This deployment uses
-plain HTTP and fixed local credentials; do not expose ports 8189/9000 to the public internet.
+Use the web address on a phone connected to the same LAN or through your configured tunnel.
+This deployment uses plain HTTP and fixed local credentials; public exposure sends passwords
+and session cookies without TLS encryption.
 The initial admin password is only applied when no admin exists; reruns do not reset it.
 Data is kept in Docker volumes. Do not run 'docker compose down -v' for this project.
 SUMMARY
