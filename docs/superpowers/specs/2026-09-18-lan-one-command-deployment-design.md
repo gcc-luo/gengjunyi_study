@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 Ubuntu 服务器已安装 Docker Engine 与 Compose 插件的前提下，用户克隆仓库后运行 `./ops/deploy-lan.sh`，即可启动单家庭 Web MVP。服务器与手机位于同一局域网时，手机可通过服务器局域网 IPv4 打开主站、上传视频和播放视频。不要求域名、TLS 或公网注册。
+在 Ubuntu 服务器已安装 Docker Engine 与 Compose 插件的前提下，用户克隆仓库后运行 `bash ./ops/deploy-lan.sh`，即可启动单家庭 Web MVP。服务器与手机位于同一局域网时，手机可通过服务器局域网 IPv4 打开主站、上传视频和播放视频。不要求域名、TLS 或公网注册。
 
 ## 方案与取舍
 
@@ -13,7 +13,7 @@ LAN Compose 使用 Caddy 的显式 HTTP 端口 8080 代理 `/api/*` 到 API，�
 
 ## 脚本行为
 
-- 入口为仓库根目录的 `./ops/deploy-lan.sh`；检查 Docker daemon 和 Compose 插件，不负责安装 Docker。
+- 入口为仓库根目录的 `bash ./ops/deploy-lan.sh`；检查 Docker daemon 和 Compose 插件，不负责安装 Docker。
 - 默认通过主路由解析服务器 LAN IPv4，也允许 `BIND_IP` 覆盖；绑定选定 IP，而不是仅绑定 loopback。
 - 首次运行创建被 Git 忽略的 `.env.lan`，其中写入固定的本地数据库、MinIO root/app、管理员和会话配置；重复运行保留已有配置并更新 LAN IP/URL。
 - 使用独立 Compose project 名与命名数据卷；启动 PostgreSQL、MinIO、桶/受限应用账号初始化、数据库迁移/seed、API、Web/Caddy；最后创建默认家长管理员（若尚不存在）并等待健康检查。

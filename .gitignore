@@ -9,4 +9,5 @@ test-results/
 .env.*
 !.env.example
 !ops/.env.production.example
+!ops/.env.lan.example
 ops/.env.production

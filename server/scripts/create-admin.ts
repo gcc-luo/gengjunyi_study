@@ -15,16 +15,14 @@ import {
 const emailSchema = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const advisoryLockKey = [1_101_775_188, 1_948_282_209] as const;
 
-export function parseCreateAdminArgs(argv: readonly string[]): { reset: boolean } {
-  if (argv.length === 0) return { reset: false };
-  if (argv.length === 1 && argv[0] === "--reset") return { reset: true };
-  throw new Error("Usage: npm run admin:create [-- --reset]");
+export function parseCreateAdminArgs(argv: readonly string[]): { reset: boolean; bootstrap: boolean } {
+  if (argv.length === 0) return { reset: false, bootstrap: false };
+  if (argv.length === 1 && argv[0] === "--reset") return { reset: true, bootstrap: false };
+  if (argv.length === 1 && argv[0] === "--bootstrap") return { reset: false, bootstrap: true };
+  throw new Error("Usage: npm run admin:create [-- --reset|--bootstrap]");
 }
 
-export async function provisionAdmin(
-  prisma: PrismaClient,
-  input: { email: string; password: string; reset: boolean },
-): Promise<void> {
+async function prepareAdminCredentials(input: { email: string; password: string }) {
   const email = input.email.trim().toLowerCase();
   if (!emailSchema.test(email)) throw new Error("A valid email address is required");
   const passwordLength = Array.from(input.password).length;
@@ -38,7 +36,14 @@ export async function provisionAdmin(
     }
   }
 
-  const passwordHash = await hashPassword(input.password);
+  return { email, passwordHash: await hashPassword(input.password) };
+}
+
+export async function provisionAdmin(
+  prisma: PrismaClient,
+  input: { email: string; password: string; reset: boolean },
+): Promise<void> {
+  const { email, passwordHash } = await prepareAdminCredentials(input);
   await prisma.$transaction(async (transaction) => {
     await transaction.$queryRaw`
       SELECT pg_advisory_xact_lock(${advisoryLockKey[0]}, ${advisoryLockKey[1]})
@@ -65,6 +70,26 @@ export async function provisionAdmin(
       throw new Error("An administrator already exists; use explicit --reset to reset it");
     }
     await transaction.adminUser.create({ data: { email, passwordHash } });
+  });
+}
+
+export async function ensureDefaultAdmin(
+  prisma: PrismaClient,
+  input: { email: string; password: string },
+): Promise<"created" | "existing"> {
+  const { email, passwordHash } = await prepareAdminCredentials(input);
+  return prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`
+      SELECT pg_advisory_xact_lock(${advisoryLockKey[0]}, ${advisoryLockKey[1]})
+    `;
+    const admins = await transaction.adminUser.findMany({
+      select: { id: true, email: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (admins.length > 0) return "existing";
+
+    await transaction.adminUser.create({ data: { email, passwordHash } });
+    return "created";
   });
 }
 
@@ -142,12 +167,23 @@ async function readEmail(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const { reset } = parseCreateAdminArgs(process.argv.slice(2));
-  if (!process.stdin.isTTY) throw new Error("Admin setup requires an interactive terminal");
+  const { reset, bootstrap } = parseCreateAdminArgs(process.argv.slice(2));
+  if (!bootstrap && !process.stdin.isTTY) throw new Error("Admin setup requires an interactive terminal");
 
   const config = parseConfig();
   const prisma = createPrismaClient(config.databaseUrl);
   try {
+    if (bootstrap) {
+      const email = process.env.ADMIN_EMAIL;
+      const password = process.env.ADMIN_PASSWORD;
+      if (!email || !password) throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD are required for bootstrap");
+      const result = await ensureDefaultAdmin(prisma, { email, password });
+      process.stderr.write(result === "created"
+        ? "Default parent administrator created.\n"
+        : "An administrator already exists; no account or password was changed.\n");
+      return;
+    }
+
     const email = await readEmail();
     const password = await readHiddenPassword();
     const confirmation = await readHiddenPassword();

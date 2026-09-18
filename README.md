@@ -9,6 +9,7 @@
 - 浏览器向 MinIO 进行 MP4 分片直传，展示真实进度，支持失败续传；刷新后重新选择同名同大小源文件继续。
 - H.264/AAC MP4 服务端校验；私有对象经授权后以短时签名链接播放，支持 HTTP Range、断点续看、90% 完成判定。
 - 一台 Ubuntu 云服务器的 Docker Compose、Caddy HTTPS、PostgreSQL 与 MinIO 配置见[部署指南](docs/deployment/ubuntu-docker.md)。
+- 无域名、供同一局域网手机访问的 Ubuntu 一键部署脚本见[局域网部署指南](docs/deployment/ubuntu-lan.md)。
 
 ## 本地开发
 

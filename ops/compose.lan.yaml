@@ -1,0 +1,159 @@
+name: family-learning-lan
+
+x-app-environment: &app-environment
+  NODE_ENV: development
+  PORT: "3000"
+  DATABASE_URL: postgresql://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}
+  MINIO_ENDPOINT: minio
+  MINIO_PORT: "9000"
+  MINIO_USE_SSL: "false"
+  MINIO_ACCESS_KEY: family_learning_api
+  MINIO_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?set MINIO_APP_SECRET_KEY}
+  MINIO_BUCKET: ${MINIO_BUCKET:-family-learning-videos}
+  MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:?set MINIO_PUBLIC_URL}
+  APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN}
+  TRUSTED_PROXIES: ""
+  APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+  SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:?set BIND_IP}:8080:8080"
+    volumes:
+      - ./Caddyfile.lan:/etc/caddy/Caddyfile:ro
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: web-runtime
+    restart: unless-stopped
+    expose:
+      - "80"
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: api-runtime
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+    expose:
+      - "3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: builder
+    restart: "no"
+    environment:
+      <<: *app-environment
+    command: ["sh", "-c", "npm run db:migrate:deploy && npm run db:seed && npm run storage:init"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  admin:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: builder
+    profiles: ["bootstrap"]
+    environment:
+      <<: *app-environment
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+    command: ["npm", "run", "admin:create", "--", "--bootstrap"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN}
+      MINIO_API_STALE_UPLOADS_EXPIRY: 168h
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 6h
+    ports:
+      - "${BIND_IP:?set BIND_IP}:9000:9000"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio-init:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: "no"
+    entrypoint: ["/bin/sh", "/ops/init-minio.sh"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+      MINIO_APP_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?set MINIO_APP_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-family-learning-videos}
+    volumes:
+      - ./init-minio.sh:/ops/init-minio.sh:ro
+      - minio_bucket_state:/state
+    depends_on:
+      minio:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    name: family-learning-lan-postgres-data
+  minio_data:
+    name: family-learning-lan-minio-data
+  minio_bucket_state:
+    name: family-learning-lan-minio-bucket-state
