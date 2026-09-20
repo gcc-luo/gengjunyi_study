@@ -4,7 +4,18 @@ import { Icon } from '../../components/Icon';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useAppStore } from '../../context/AppStore';
 import { getCourseProgress } from '../../lib/domain';
-import { CourseStatus, VideoStatus, type Course, type Video } from '../../types/domain';
+import englishBackground from '../../assets/subjects/english-background.jpg';
+import chineseBackground from '../../assets/subjects/chinese-background.jpg';
+import mathBackground from '../../assets/subjects/math-background.jpg';
+import scienceBackground from '../../assets/subjects/science-background.jpg';
+import { CourseStatus, VideoStatus, type Course, type SubjectId, type Video } from '../../types/domain';
+
+const subjectBackgrounds: Record<SubjectId, string> = {
+  english: englishBackground,
+  chinese: chineseBackground,
+  math: mathBackground,
+  science: scienceBackground,
+};
 
 function durationText(seconds: number): string {
   return `${Math.max(1, Math.round(seconds / 60))} 分钟`;
@@ -46,7 +57,7 @@ export function HomePage() {
         <div className="continue-illustration" aria-hidden="true">✦<span>▶</span></div>
       </section>
 
-      <section className="child-section"><div className="child-section-heading"><h2>探索学科</h2><Link to="/child/courses">全部课程</Link></div><div className="subject-grid">{subjects.map((subject) => <Link className={`subject-card subject-${subject.id}`} to={`/child/courses?subject=${subject.id}`} key={subject.id}><span>{subject.icon}</span><strong>{subject.name}</strong><small>去探索 →</small></Link>)}</div></section>
+      <section className="child-section"><div className="child-section-heading"><h2>探索学科</h2><Link to="/child/courses">全部课程</Link></div><div className="subject-grid">{subjects.map((subject) => <Link className={`subject-card subject-${subject.id}`} style={{ backgroundImage: `linear-gradient(150deg, ${subject.color}85, ${subject.color}4d), url(${subjectBackgrounds[subject.id]})` }} to={`/child/courses?subject=${subject.id}`} key={subject.id}><span>{subject.icon}</span><strong>{subject.name}</strong><small>去探索 →</small></Link>)}</div></section>
 
       <section className="child-section"><div className="child-section-heading"><h2>我的课程</h2><Link to="/child/courses?mine=1">查看全部</Link></div>{publishedCourses.length ? <div className="child-course-list">{publishedCourses.slice(0, 3).map((course) => { const courseProgress = getCourseProgress(course, videos, snapshot.watchProgress, currentChildId); return <Link className="child-course-row" to={`/child/course/${course.id}`} key={course.id}><span className="course-cover" style={{ background: `linear-gradient(135deg, ${course.cover.colors.join(',')})` }}>{subjectName(course.subjectId, subjects).slice(0, 1)}</span><span className="child-course-info"><strong>{course.title}</strong><small>{subjectName(course.subjectId, subjects)} · {course.videoIds.length} 集</small><span data-testid={`course-progress-${course.id}`}><ProgressBar value={courseProgress} label={`${course.title}课程进度`} /></span></span><span className="row-arrow" aria-hidden="true">›</span></Link>; })}</div> : <EmptyState title="还没有课程" description="请让家长添加学习内容。" />}</section>
     </main>

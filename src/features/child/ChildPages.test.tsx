@@ -188,6 +188,18 @@ describe('child learning pages', () => {
     expect(window.location.pathname).toBe('/child/select');
   });
 
+  it('uses a themed background asset for each subject card', () => {
+    renderRoute('/child/select', childSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+
+    const cards = screen.getAllByRole('link', { name: /去探索/ });
+    expect(cards[0]).toHaveStyle({ backgroundImage: expect.stringContaining('english-background.jpg') });
+    expect(cards[0].getAttribute('style')).toContain('#FF6C6685');
+    expect(cards[1]).toHaveStyle({ backgroundImage: expect.stringContaining('chinese-background.jpg') });
+    expect(cards[2]).toHaveStyle({ backgroundImage: expect.stringContaining('math-background.jpg') });
+    expect(cards[3]).toHaveStyle({ backgroundImage: expect.stringContaining('science-background.jpg') });
+  });
+
   it('shows the current child course progress only on home', () => {
     renderRoute('/child/select', childSnapshot());
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
