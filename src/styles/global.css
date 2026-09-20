@@ -166,10 +166,16 @@
 .watch-screen-live::before,.watch-screen-live::after { display:none; }
 .watch-screen-live > p { position:static; color:#fff; font-size:13px; }
 .watch-video { z-index:1; width:100%; height:100%; min-height:0; max-height:75vh; object-fit:contain; background:#05070c; }
+.watch-buffering { position:absolute; z-index:2; top:50%; left:50%; display:flex; align-items:center; gap:8px; padding:9px 13px; transform:translate(-50%,-50%); border:1px solid rgba(255,255,255,.3); border-radius:999px; color:#fff; background:rgba(8,20,48,.8); box-shadow:0 5px 16px rgba(0,0,0,.2); font-size:12px; white-space:nowrap; }
+.watch-buffering-spinner { width:12px; height:12px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:watch-buffering-spin .75s linear infinite; }
+@keyframes watch-buffering-spin { to { transform:rotate(360deg); } }
 .watch-media-error { z-index:1; display:grid; justify-items:center; gap:10px; max-width:min(90%, 520px); color:#fff; text-align:center; }
 .watch-media-error p { position:static; color:#fff; font-size:13px; }
 .watch-media-error button { padding:8px 16px; border:1px solid rgba(255,255,255,.65); border-radius:8px; color:#fff; background:rgba(255,255,255,.12); cursor:pointer; }
 .watch-media-retry { position:absolute; z-index:3; bottom:16px; left:50%; padding:9px 15px; transform:translateX(-50%); border:1px solid rgba(255,255,255,.75); border-radius:9px; color:#fff; background:rgba(7,24,63,.88); cursor:pointer; }
+.course-access-list { display:grid; gap:9px; max-height:280px; margin:0; padding:12px; overflow:auto; border:1px solid var(--line); border-radius:12px; }
+.course-access-list label { display:flex; align-items:center; gap:8px; color:var(--navy); font-size:13px; }
+.course-access-list input { accent-color:var(--blue); }
 
 /* Subject cards are pure full-bleed illustrated poster links. */
 .subject-grid { gap:8px; }

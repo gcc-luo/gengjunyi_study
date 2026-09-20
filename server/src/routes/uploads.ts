@@ -52,7 +52,7 @@ export function registerUploadRoutes(
   storage: MediaStorage,
   validateMedia: (url: string) => Promise<MediaValidationResult>,
 ): void {
-  app.post("/api/courses/:courseId/uploads", { preHandler: app.requireParent }, async (request, reply) => {
+  app.post("/api/courses/:courseId/uploads", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = courseParams.safeParse(request.params);
     const body = createSchema.safeParse(request.body);
     if (!params.success || !body.success) {
@@ -66,7 +66,7 @@ export function registerUploadRoutes(
     }
   });
 
-  app.get("/api/uploads/:uploadId", { preHandler: app.requireParent }, async (request, reply) => {
+  app.get("/api/uploads/:uploadId", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = uploadParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Upload ID is invalid" } });
     try {
@@ -76,7 +76,7 @@ export function registerUploadRoutes(
     }
   });
 
-  app.post("/api/uploads/:uploadId/parts/:partNumber/url", { preHandler: app.requireParent }, async (request, reply) => {
+  app.post("/api/uploads/:uploadId/parts/:partNumber/url", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = partParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Part number is invalid" } });
     try {
@@ -86,7 +86,7 @@ export function registerUploadRoutes(
     }
   });
 
-  app.post("/api/uploads/:uploadId/complete", { preHandler: app.requireParent }, async (request, reply) => {
+  app.post("/api/uploads/:uploadId/complete", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = uploadParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Upload ID is invalid" } });
     try {
@@ -97,7 +97,7 @@ export function registerUploadRoutes(
     }
   });
 
-  app.post("/api/uploads/:uploadId/cancel", { preHandler: app.requireParent }, async (request, reply) => {
+  app.post("/api/uploads/:uploadId/cancel", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = uploadParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Upload ID is invalid" } });
     try {

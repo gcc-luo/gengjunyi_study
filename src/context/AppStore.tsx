@@ -228,38 +228,47 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
   const auth = useAuthOptional();
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
   const apiEnabled = !auth || auth.status === 'authenticated';
+  const parentApiEnabled = apiEnabled && (!auth || auth.parentUnlocked);
   const activeChildId = auth?.session?.authenticated ? auth.session.activeChildId : null;
   const childrenQuery = useQuery({
     queryKey: ['parent', 'children'],
     queryFn: () => apiRequest<ChildApi[]>('/api/children'),
-    enabled: apiEnabled,
+    enabled: parentApiEnabled,
   });
   const coursesQuery = useQuery({
     queryKey: ['parent', 'courses'],
     queryFn: () => apiRequest<CourseApi[]>('/api/courses'),
-    enabled: apiEnabled,
+    enabled: parentApiEnabled,
   });
   const childCoursesQuery = useQuery({
     queryKey: ['child', activeChildId, 'courses'],
     queryFn: () => apiRequest<CourseApi[]>('/api/child/courses'),
     enabled: Boolean(activeChildId) && apiEnabled,
   });
+  const childProfileQuery = useQuery({
+    queryKey: ['child', activeChildId, 'profile'],
+    queryFn: () => apiRequest<ChildApi>('/api/child/profile'),
+    enabled: Boolean(activeChildId) && apiEnabled && !childrenQuery.data?.some((child) => child.id === activeChildId),
+  });
   const overviewQuery = useQuery({
     queryKey: ['parent', 'overview'],
     queryFn: () => apiRequest<OverviewData>('/api/overview'),
-    enabled: apiEnabled,
+    enabled: parentApiEnabled,
   });
   const recentRecordsQuery = useQuery({
     queryKey: ['parent', 'records', 'summary'],
     queryFn: () => apiRequest<RecordApi>('/api/records?limit=100'),
-    enabled: apiEnabled,
+    enabled: parentApiEnabled,
   });
   const favoritesQuery = useQuery({
     queryKey: ['child', activeChildId, 'favorites'],
     queryFn: () => apiRequest<Array<{ id: string; childId: string; videoId: string; createdAt: string; video?: { course?: { id: string } | null } }>>(`/api/children/${encodeURIComponent(activeChildId!)}/favorites`),
     enabled: Boolean(activeChildId) && apiEnabled,
   });
-  const children = (childrenQuery.data ?? []).map(mapChild);
+  const parentChildren = (childrenQuery.data ?? []).map(mapChild);
+  const children = childProfileQuery.data && !parentChildren.some((child) => child.id === childProfileQuery.data!.id)
+    ? [...parentChildren, mapChild(childProfileQuery.data)]
+    : parentChildren;
   const courses = (coursesQuery.data ?? []).map(mapCourse);
   const videos = (coursesQuery.data ?? []).flatMap((course) => course.videos.map(mapVideo));
   const childCourses = (childCoursesQuery.data ?? []).map(mapChildCourse);
@@ -316,7 +325,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     })),
     uploadTasks,
   };
-  const loadingQueries = [childrenQuery, coursesQuery, overviewQuery, recentRecordsQuery, ...(activeChildId ? [childCoursesQuery] : [])];
+  const loadingQueries = [childrenQuery, coursesQuery, overviewQuery, recentRecordsQuery, ...(activeChildId ? [childCoursesQuery, childProfileQuery] : [])];
   const errorValue = loadingQueries.find((item) => item.error)?.error ?? favoritesQuery.error;
   const invalidate = async () => {
     await Promise.all([

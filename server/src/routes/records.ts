@@ -16,7 +16,7 @@ function error(reply: FastifyReply, status: number, code: string, message: strin
 }
 
 export function registerParentRecordRoutes(app: FastifyInstance, prisma: PrismaClient): void {
-  app.get("/api/records", { preHandler: app.requireParent }, async (request, reply) => {
+  app.get("/api/records", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const parsed = querySchema.safeParse(request.query);
     if (!parsed.success) return error(reply, 400, "BAD_REQUEST", "Record filters are invalid");
     const query = parsed.data;

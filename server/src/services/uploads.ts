@@ -173,6 +173,7 @@ export async function getUploadStatus(prisma: PrismaClient, storage: MediaStorag
     mediaStatus: video?.status ?? null,
     processingStage: video?.processingStage ?? null,
     processingProgress: video?.processingProgress ?? 0,
+    processingUpdatedAt: video?.updatedAt?.toISOString() ?? null,
     failureReason: video?.failureReason ?? null,
   };
 }

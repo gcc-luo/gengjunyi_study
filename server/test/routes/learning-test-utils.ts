@@ -48,6 +48,7 @@ export function makeLearningHarness(options: {
     adminUserId: adminUser.id,
     tokenHash: sessionTokenHash,
     activeChildId: state.activeChildId,
+    parentUnlockedAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     expiresAt: new Date(Date.now() + 60_000),
   };
   const matches = (actual: any, where: any = {}) => Object.entries(where).every(([key, expected]) => {

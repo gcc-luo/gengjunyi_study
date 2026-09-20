@@ -96,6 +96,7 @@ export type RouteState = {
     id: string;
     adminUserId: string;
     activeChildId: string | null;
+    parentUnlockedAt: Date | null;
     tokenHash: string;
     expiresAt: Date;
   }>;
@@ -169,6 +170,7 @@ export function makePrisma(options: {
       id: "session-1",
       adminUserId: "admin-1",
       activeChildId: options.activeChildId ?? null,
+      parentUnlockedAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       tokenHash: sessionTokenHash,
       expiresAt: new Date(Date.now() + 60_000),
     }],
@@ -248,6 +250,7 @@ export function makePrisma(options: {
     course: {
       findMany: vi.fn(async ({ where, include }: any = {}) => state.courses
         .filter((course) => !where?.status || course.status === where.status)
+        .filter((course) => !where?.id?.in || where.id.in.includes(course.id))
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
         .map((course) => include ? includedCourse(course, include) : course)),
       findUnique: vi.fn(async ({ where, include }: any) => {
@@ -291,6 +294,11 @@ export function makePrisma(options: {
       findMany: vi.fn(async ({ where }: any = {}) => state.progress
         .filter((item) => !where?.childId || item.childId === where.childId)
         .filter((item) => !where?.videoId?.in || where.videoId.in.includes(item.videoId))),
+    },
+    parentSetting: {
+      findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
+      upsert: vi.fn(async ({ create, update }: any) => ({ value: update?.value ?? create?.value })),
     },
     $queryRaw: vi.fn(async () => []),
     $transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback(client)),

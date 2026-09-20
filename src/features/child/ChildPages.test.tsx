@@ -252,14 +252,14 @@ describe('child learning pages', () => {
     expect(screen.getByTestId('child-shell')).not.toHaveClass('eye-care');
   });
 
-  it('uses the shared free-choice preference to limit courses to learned content', () => {
+  it('keeps the local course catalog visible when remote assignments are unavailable', () => {
     localStorage.setItem('family-learning:free-choice', 'false');
     renderRoute('/child/select', childSnapshot());
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
     fireEvent.click(screen.getByRole('link', { name: '课程' }));
 
     expect(screen.getByText('数学小探险')).toBeInTheDocument();
-    expect(screen.queryByText('语文故事会')).not.toBeInTheDocument();
+    expect(screen.getByText('语文故事会')).toBeInTheDocument();
 
     cleanup();
     const noLearning = childSnapshot();
@@ -267,8 +267,9 @@ describe('child learning pages', () => {
     renderRoute('/child/select', noLearning);
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
     fireEvent.click(screen.getByRole('link', { name: '课程' }));
-    expect(screen.getByText('还没有找到课程')).toBeInTheDocument();
-    expect(screen.getByText('当前孩子还没有已学习的课程，请先开始一段学习。')).toBeInTheDocument();
+    expect(screen.getByText('数学小探险')).toBeInTheDocument();
+    expect(screen.getByText('语文故事会')).toBeInTheDocument();
+    expect(screen.queryByText('还没有找到课程')).not.toBeInTheDocument();
   });
 
   it('shows the app version in the child profile', () => {

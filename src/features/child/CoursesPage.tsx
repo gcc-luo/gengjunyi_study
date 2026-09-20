@@ -19,7 +19,7 @@ export function CoursesPage() {
   const publishedCourses = courses.filter((course) => {
     if (course.status !== CourseStatus.PUBLISHED) return false;
     if (subjectId && course.subjectId !== subjectId) return false;
-    if ((!freeChoice || mineOnly) && !course.videoIds.some((videoId) => snapshot.watchProgress.some((item) => item.childId === currentChildId && item.videoId === videoId && item.totalWatchSeconds > 0))) return false;
+    if (mineOnly && !course.videoIds.some((videoId) => snapshot.watchProgress.some((item) => item.childId === currentChildId && item.videoId === videoId && item.totalWatchSeconds > 0))) return false;
     if (favoriteOnly && !favorites.some((favorite) => favorite.courseId === course.id || (favorite.videoId && course.videoIds.includes(favorite.videoId)))) return false;
     return true;
   });

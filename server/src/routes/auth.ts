@@ -23,6 +23,9 @@ const loginBodySchema = z.object({
 const activeChildBodySchema = z.object({
   childId: z.string().min(1).max(128),
 });
+const unlockParentBodySchema = z.object({
+  password: z.string().min(1),
+});
 
 const maxLoginAttemptsPerIp = 30;
 const maxLoginAttemptsPerAccountAndIp = 5;
@@ -53,7 +56,7 @@ async function createParentSession(
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   const expiresAt = new Date(Date.now() + config.sessionLifetimeSeconds * 1000);
   const session = await prisma.session.create({
-    data: { adminUserId: admin.id, tokenHash, expiresAt },
+    data: { adminUserId: admin.id, tokenHash, expiresAt, parentUnlockedAt: new Date() },
   });
 
   reply.setCookie(config.sessionCookieName, rawToken, {
@@ -73,6 +76,7 @@ async function createParentSession(
     activeChildId: null,
     activeChild: null,
     csrfToken: createSessionCsrfToken(config.sessionSecret, session.tokenHash),
+    parentUnlocked: true,
   };
 }
 
@@ -128,6 +132,7 @@ export function registerAuthRoutes(
         ? { id: session.activeChild.id, name: session.activeChild.name }
         : null,
       csrfToken: createSessionCsrfToken(config.sessionSecret, session.tokenHash),
+      parentUnlocked: config.authBypass || Boolean(session.parentUnlockedAt && session.parentUnlockedAt.getTime() > Date.now()),
     };
   });
 
@@ -186,12 +191,27 @@ export function registerAuthRoutes(
 
     await prisma.session.update({
       where: { id: session.id },
-      data: { activeChildId: child.id },
+      data: { activeChildId: child.id, parentUnlockedAt: null },
     });
     return {
       activeChildId: child.id,
       activeChild: { id: child.id, name: child.name },
+      parentUnlocked: false,
     };
+  });
+
+  app.post("/api/auth/unlock-parent", { preHandler: app.requireParent }, async (request, reply) => {
+    const session = request.parentSession;
+    if (!session) return reply.code(401).send(errorResponse("AUTH_REQUIRED", "Parent authentication is required"));
+    const parsed = unlockParentBodySchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send(errorResponse("BAD_REQUEST", "Password is required"));
+    if (!config.authBypass) {
+      const admin = await prisma.adminUser.findUnique({ where: { id: session.adminUserId } });
+      const passwordMatches = await verifyPassword(parsed.data.password, admin?.passwordHash);
+      if (!passwordMatches) return reply.code(401).send(errorResponse("INVALID_CREDENTIALS", "Password is incorrect"));
+    }
+    await prisma.session.update({ where: { id: session.id }, data: { parentUnlockedAt: new Date(), activeChildId: null } });
+    return { parentUnlocked: true, activeChildId: null, activeChild: null };
   });
 }
 

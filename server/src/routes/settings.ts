@@ -9,7 +9,7 @@ function error(reply: FastifyReply, status: number, code: string, message: strin
 }
 
 export function registerSettingsRoutes(app: FastifyInstance, prisma: PrismaClient): void {
-  app.get("/api/settings", { preHandler: app.requireParent }, async (request, reply) => {
+  app.get("/api/settings", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const settings = await prisma.parentSetting.findMany({
       where: { adminUserId: request.parentSession!.adminUserId, key: "freeChoice" },
       select: { value: true },
@@ -17,7 +17,7 @@ export function registerSettingsRoutes(app: FastifyInstance, prisma: PrismaClien
     return reply.send({ freeChoice: settings[0]?.value !== "false" });
   });
 
-  app.patch("/api/settings", { preHandler: app.requireParent }, async (request, reply) => {
+  app.patch("/api/settings", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const parsed = updateSettingsSchema.safeParse(request.body);
     if (!parsed.success) return error(reply, 400, "BAD_REQUEST", "Settings are invalid");
     const setting = await prisma.parentSetting.upsert({

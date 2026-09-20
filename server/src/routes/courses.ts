@@ -36,11 +36,11 @@ function notFound(reply: FastifyReply) {
 }
 
 export function registerCourseRoutes(app: FastifyInstance, prisma: PrismaClient): void {
-  app.get("/api/courses", { preHandler: app.requireParent }, async (_request, reply) => {
+  app.get("/api/courses", { preHandler: app.requireParentUnlocked }, async (_request, reply) => {
     return reply.send(await listCourses(prisma));
   });
 
-  app.post("/api/courses", { preHandler: app.requireParent }, async (request, reply) => {
+  app.post("/api/courses", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const parsed = createCourseSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send(errorResponse("BAD_REQUEST", "Course details are invalid"));
@@ -52,7 +52,7 @@ export function registerCourseRoutes(app: FastifyInstance, prisma: PrismaClient)
     return reply.code(201).send(result.course);
   });
 
-  app.get("/api/courses/:courseId", { preHandler: app.requireParent }, async (request, reply) => {
+  app.get("/api/courses/:courseId", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = courseIdParamsSchema.safeParse(request.params);
     if (!params.success) {
       return reply.code(400).send(errorResponse("BAD_REQUEST", "Course ID is invalid"));
@@ -62,7 +62,7 @@ export function registerCourseRoutes(app: FastifyInstance, prisma: PrismaClient)
     return reply.send(course);
   });
 
-  app.patch("/api/courses/:courseId", { preHandler: app.requireParent }, async (request, reply) => {
+  app.patch("/api/courses/:courseId", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = courseIdParamsSchema.safeParse(request.params);
     const body = updateCourseSchema.safeParse(request.body);
     if (!params.success || !body.success) {
@@ -79,7 +79,7 @@ export function registerCourseRoutes(app: FastifyInstance, prisma: PrismaClient)
     return reply.send(result.course);
   });
 
-  app.post("/api/courses/:courseId/publish", { preHandler: app.requireParent }, async (request, reply) => {
+  app.post("/api/courses/:courseId/publish", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = courseIdParamsSchema.safeParse(request.params);
     if (!params.success) {
       return reply.code(400).send(errorResponse("BAD_REQUEST", "Course ID is invalid"));
@@ -95,7 +95,7 @@ export function registerCourseRoutes(app: FastifyInstance, prisma: PrismaClient)
     return reply.send(result.course);
   });
 
-  app.post("/api/courses/:courseId/unpublish", { preHandler: app.requireParent }, async (request, reply) => {
+  app.post("/api/courses/:courseId/unpublish", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const params = courseIdParamsSchema.safeParse(request.params);
     if (!params.success) {
       return reply.code(400).send(errorResponse("BAD_REQUEST", "Course ID is invalid"));

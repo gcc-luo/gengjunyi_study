@@ -15,6 +15,7 @@ import { CoursePage as ChildCoursePage } from './features/child/CoursePage';
 import { MePage } from './features/child/MePage';
 import { WatchPage } from './features/child/WatchPage';
 import { LoginPage } from './features/auth/LoginPage';
+import { ParentUnlockPage } from './features/auth/ParentUnlockPage';
 import { RecordsPage as ChildRecordsPage } from './features/child/RecordsPage';
 import { useAppStore } from './context/AppStore';
 import { useAuth } from './context/AuthProvider';
@@ -107,6 +108,11 @@ function RequireChildSelection() {
   return currentChildId ? <Outlet /> : <Navigate to="/child/select" replace />;
 }
 
+function RequireParentAccess() {
+  const auth = useAuth();
+  return auth.parentUnlocked ? <Outlet /> : <ParentUnlockPage />;
+}
+
 export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -114,6 +120,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
+          <Route element={<RequireParentAccess />}>
           <Route path="/parent" element={<ParentShell />}>
             <Route index element={<OverviewPage />} />
             <Route path="overview" element={<OverviewPage />} />
@@ -123,6 +130,7 @@ export default function App() {
             <Route path="children" element={<ChildrenPage />} />
             <Route path="records" element={<RecordsPage />} />
             <Route path="settings" element={<SettingsPage />} />
+          </Route>
           </Route>
           <Route path="/child" element={<ChildShell />}>
             <Route index element={<SelectChildPage />} />

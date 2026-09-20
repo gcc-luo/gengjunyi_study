@@ -284,9 +284,27 @@ export async function unpublishCourse(prisma: PrismaClient, id: string) {
   return toCourseDto(course);
 }
 
-export async function listChildCourses(prisma: PrismaClient, childId: string) {
+async function assignedCourseIds(prisma: PrismaClient, childId: string, adminUserId?: string): Promise<string[] | null> {
+  if (!adminUserId) return null;
+  const freeChoice = await prisma.parentSetting.findUnique({
+    where: { adminUserId_key: { adminUserId, key: "freeChoice" } },
+    select: { value: true },
+  });
+  if (freeChoice?.value !== "false") return null;
+  const assigned = await prisma.parentSetting.findUnique({
+    where: { adminUserId_key: { adminUserId, key: `childCourses:${childId}` } },
+    select: { value: true },
+  });
+  try {
+    const parsed = assigned?.value ? JSON.parse(assigned.value) : [];
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch { return []; }
+}
+
+export async function listChildCourses(prisma: PrismaClient, childId: string, adminUserId?: string) {
+  const assignedIds = await assignedCourseIds(prisma, childId, adminUserId);
   const courses = await prisma.course.findMany({
-    where: { status: "PUBLISHED" },
+    where: { status: "PUBLISHED", ...(assignedIds ? { id: { in: assignedIds } } : {}) },
     orderBy: { updatedAt: "desc" },
     include: childCourseInclude,
   });
@@ -307,9 +325,10 @@ export async function listChildCourses(prisma: PrismaClient, childId: string) {
   return courses.map((course) => toChildCourseDto(course, progress));
 }
 
-export async function getChildCourse(prisma: PrismaClient, childId: string, id: string) {
+export async function getChildCourse(prisma: PrismaClient, childId: string, id: string, adminUserId?: string) {
+  const assignedIds = await assignedCourseIds(prisma, childId, adminUserId);
   const course = await prisma.course.findFirst({
-    where: { id, status: "PUBLISHED" },
+    where: { id, status: "PUBLISHED", ...(assignedIds ? { id: { in: assignedIds } } : {}) },
     include: childCourseInclude,
   });
   if (!course) return null;

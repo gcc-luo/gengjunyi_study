@@ -35,6 +35,7 @@ type UploadTask = {
   error?: string;
   videoId?: string;
   processingStage?: string | null;
+  processingUpdatedAt?: string | null;
 };
 type UploadStatus = {
   uploadId: string;
@@ -46,6 +47,7 @@ type UploadStatus = {
   mediaStatus?: string | null;
   processingStage?: string | null;
   processingProgress?: number;
+  processingUpdatedAt?: string | null;
   failureReason?: string | null;
 };
 type SignedPart = PartUrlResult;
@@ -125,7 +127,9 @@ export function UploadsPage() {
           } else if (status.mediaStatus === 'FAILED') {
             patchTask(task.id, { status: 'FAILED', progress: combinedProgress('FAILED'), canResume: false, processingStage: 'FAILED', error: status.failureReason || '视频转码失败，源文件将在 24 小时后自动清理。' }, true);
           } else {
-            patchTask(task.id, { progress: combinedProgress(status.processingStage, status.processingProgress), processingStage: status.processingStage, videoId: status.videoId ?? task.videoId, error: undefined });
+            const lastUpdate = status.processingUpdatedAt ? Date.parse(status.processingUpdatedAt) : 0;
+            const stale = lastUpdate > 0 && Date.now() - lastUpdate > 10 * 60 * 1000;
+            patchTask(task.id, { progress: combinedProgress(status.processingStage, status.processingProgress), processingStage: status.processingStage, videoId: status.videoId ?? task.videoId, error: stale ? '转码进度超过 10 分钟未更新，请确认 worker 正在运行。' : undefined });
           }
         } catch (cause) {
           if (active) patchTask(task.id, { error: `暂时无法获取转码进度：${uploadFailureMessage(cause)}` });

@@ -323,7 +323,7 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
     });
   });
 
-  app.get("/api/overview", { preHandler: app.requireParent }, async (request, reply) => {
+  app.get("/api/overview", { preHandler: app.requireParentUnlocked }, async (request, reply) => {
     const now = new Date();
     const todayStart = localDayStart(now, timeZone);
     const tomorrowStart = localDayStart(now, timeZone, -1);

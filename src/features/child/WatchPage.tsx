@@ -55,6 +55,8 @@ export function WatchPage() {
   const [lastHeartbeatAt, setLastHeartbeatAt] = useState(() => initialProgress ? Date.parse(initialProgress.updatedAt) || Date.now() : Date.now());
   const [fullscreenMessage, setFullscreenMessage] = useState('');
   const [mediaFailed, setMediaFailed] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [bufferingPosition, setBufferingPosition] = useState<number | null>(null);
 
   const isMountedRef = useRef(false);
   const isPlayingRef = useRef(isPlaying);
@@ -114,6 +116,8 @@ export function WatchPage() {
     seekWasPlayingRef.current = isPlayingRef.current;
     positionRef.current = target;
     setPositionSeconds(target);
+    setIsBuffering(true);
+    setBufferingPosition(target);
     dirtyRef.current = true;
   };
 
@@ -122,12 +126,18 @@ export function WatchPage() {
     persistProgress(positionRef.current, 0, shouldResume, true, 'SEEK');
     pendingSeekPositionRef.current = null;
     seekWasPlayingRef.current = null;
+    if (media.readyState >= 3) {
+      setIsBuffering(false);
+      setBufferingPosition(null);
+    }
     if (shouldResume && media.paused) {
       void media.play().catch(() => setFullscreenMessage(`已定位到 ${formatTime(positionRef.current)}，请点击视频继续播放。`));
     }
   };
 
   const handleMediaPlay = () => {
+    setIsBuffering(false);
+    setBufferingPosition(null);
     isPlayingRef.current = true;
     setIsPlaying(true);
     persistProgress(positionRef.current, 0, true, true, 'PLAY');
@@ -151,6 +161,16 @@ export function WatchPage() {
     setIsPlaying(false);
   };
 
+  const handleMediaWaiting = (media: HTMLVideoElement) => {
+    setIsBuffering(true);
+    setBufferingPosition(clampPosition(media.currentTime, durationRef.current));
+  };
+
+  const handleMediaCanPlay = () => {
+    setIsBuffering(false);
+    setBufferingPosition(null);
+  };
+
   const renewPlaybackUrl = (manual = false) => {
     if (manual) renewedPlaybackRef.current = false;
     if (renewedPlaybackRef.current) {
@@ -167,6 +187,8 @@ export function WatchPage() {
     };
     renewedPlaybackRef.current = true;
     setMediaFailed(false);
+    setIsBuffering(true);
+    setBufferingPosition(resumePosition);
     setFullscreenMessage(`正在加载 ${formatTime(resumePosition)}，稍候将从该位置继续…`);
     const previousUrl = playbackQuery.data?.url;
     void playbackQuery.refetch().then(({ data, error }) => {
@@ -437,7 +459,8 @@ export function WatchPage() {
             setFullscreenMessage('');
             if (renewedPlayback.wasPlaying) void media.play().catch(() => setFullscreenMessage('已恢复播放位置，请点击视频继续播放。'));
           }
-        }} onSeeking={(event) => handleMediaSeeking(event.currentTarget)} onSeeked={(event) => handleMediaSeeked(event.currentTarget)} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={handleMediaPlay} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
+        }} onSeeking={(event) => handleMediaSeeking(event.currentTarget)} onSeeked={(event) => handleMediaSeeked(event.currentTarget)} onWaiting={(event) => handleMediaWaiting(event.currentTarget)} onCanPlay={handleMediaCanPlay} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={handleMediaPlay} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
+        {(isBuffering || playbackQuery.isLoading) && <div className="watch-buffering" data-testid="watch-buffering" role="status"><span className="watch-buffering-spinner" aria-hidden="true" />正在加载 {formatTime(bufferingPosition ?? positionSeconds)}…</div>}
         {mediaFailed && <button className="watch-media-retry" type="button" onClick={() => renewPlaybackUrl(true)}>重新连接视频</button>}
         <button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>
         {fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}

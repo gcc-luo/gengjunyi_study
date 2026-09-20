@@ -12,6 +12,7 @@ export type ParentSession = {
   id: string;
   adminUserId: string;
   activeChildId: string | null;
+  parentUnlockedAt: Date | null;
   tokenHash: string;
   expiresAt: Date;
   adminUser: { id: string; email: string };
@@ -25,6 +26,7 @@ declare module "fastify" {
 
   interface FastifyInstance {
     requireParent: preHandlerHookHandler;
+    requireParentUnlocked: preHandlerHookHandler;
   }
 }
 
@@ -148,6 +150,25 @@ export function installAuthProtection(
       });
     }
     request.parentSession = session;
+  });
+
+  app.decorate("requireParentUnlocked", async (request, reply) => {
+    const session = request.parentSession ?? await resolveParentSession(
+      prisma,
+      config,
+      request.cookies[config.sessionCookieName],
+    );
+    if (!session) {
+      return reply.code(401).send({
+        error: { code: "AUTH_REQUIRED", message: "Parent authentication is required" },
+      });
+    }
+    request.parentSession = session;
+    if (!session?.parentUnlockedAt || session.parentUnlockedAt.getTime() <= Date.now()) {
+      return reply.code(423).send({
+        error: { code: "PARENT_UNLOCK_REQUIRED", message: "Parent verification is required" },
+      });
+    }
   });
 
   app.addHook("preHandler", async (request, reply) => {

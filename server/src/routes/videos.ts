@@ -13,7 +13,7 @@ export function registerVideoManagementRoutes(
   prisma: PrismaClient,
   storage: MediaStorage,
 ): void {
-  app.patch("/api/videos/:videoId", { preHandler: app.requireParent }, async (request, reply: FastifyReply) => {
+  app.patch("/api/videos/:videoId", { preHandler: app.requireParentUnlocked }, async (request, reply: FastifyReply) => {
     const params = paramsSchema.safeParse(request.params);
     const body = updateSchema.safeParse(request.body);
     if (!params.success || !body.success) {
@@ -29,7 +29,7 @@ export function registerVideoManagementRoutes(
     return reply.send(updated);
   });
 
-  app.delete("/api/videos/:videoId", { preHandler: app.requireParent }, async (request, reply: FastifyReply) => {
+  app.delete("/api/videos/:videoId", { preHandler: app.requireParentUnlocked }, async (request, reply: FastifyReply) => {
     const params = paramsSchema.safeParse(request.params);
     const body = deleteSchema.safeParse(request.body);
     if (!params.success) {
@@ -49,7 +49,7 @@ export function registerVideoManagementRoutes(
     }
   });
 
-  app.post("/api/videos/:videoId/restore", { preHandler: app.requireParent }, async (request, reply: FastifyReply) => {
+  app.post("/api/videos/:videoId/restore", { preHandler: app.requireParentUnlocked }, async (request, reply: FastifyReply) => {
     const params = paramsSchema.safeParse(request.params);
     if (!params.success) {
       return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Video ID is invalid" } });
@@ -66,7 +66,7 @@ export function registerVideoManagementRoutes(
     }
   });
 
-  app.post("/api/videos/:videoId/retry-processing", { preHandler: app.requireParent }, async (request, reply: FastifyReply) => {
+  app.post("/api/videos/:videoId/retry-processing", { preHandler: app.requireParentUnlocked }, async (request, reply: FastifyReply) => {
     const params = paramsSchema.safeParse(request.params);
     if (!params.success) {
       return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Video ID is invalid" } });

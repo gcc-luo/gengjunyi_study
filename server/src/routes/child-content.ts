@@ -22,7 +22,7 @@ async function requireActiveChild(request: FastifyRequest, prisma: PrismaClient,
 
   const child = await prisma.child.findFirst({
     where: { id: session.activeChildId, status: "ACTIVE" },
-    select: { id: true },
+    select: { id: true, name: true, avatar: true, grade: true, status: true, createdAt: true },
   });
   if (!child) {
     await prisma.session.update({ where: { id: session.id }, data: { activeChildId: null } });
@@ -33,10 +33,16 @@ async function requireActiveChild(request: FastifyRequest, prisma: PrismaClient,
 }
 
 export function registerChildContentRoutes(app: FastifyInstance, prisma: PrismaClient): void {
+  app.get("/api/child/profile", { preHandler: app.requireParent }, async (request, reply) => {
+    const child = await requireActiveChild(request, prisma, reply);
+    if (!child) return reply;
+    return reply.send(child);
+  });
+
   app.get("/api/child/courses", { preHandler: app.requireParent }, async (request, reply) => {
     const child = await requireActiveChild(request, prisma, reply);
     if (!child) return reply;
-    return reply.send(await listChildCourses(prisma, child.id));
+    return reply.send(await listChildCourses(prisma, child.id, request.parentSession!.adminUserId));
   });
 
   app.get("/api/child/courses/:courseId", { preHandler: app.requireParent }, async (request, reply) => {
@@ -46,7 +52,7 @@ export function registerChildContentRoutes(app: FastifyInstance, prisma: PrismaC
     if (!params.success) {
       return reply.code(400).send(errorResponse("BAD_REQUEST", "Course ID is invalid"));
     }
-    const course = await getChildCourse(prisma, child.id, params.data.courseId);
+    const course = await getChildCourse(prisma, child.id, params.data.courseId, request.parentSession!.adminUserId);
     if (!course) return notFound(reply);
     return reply.send(course);
   });
