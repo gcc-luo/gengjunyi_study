@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/.env.lan"
 COMPOSE_FILE="$ROOT_DIR/ops/compose.lan.yaml"
 PROJECT_NAME="family-learning-lan"
+source "$ROOT_DIR/ops/lib/lan-origins.sh"
 
 usage() {
   cat <<'USAGE'
@@ -104,7 +105,6 @@ if [[ -z "$previous_host_ip" && "$previous_bind_ip" != "0.0.0.0" ]]; then
 fi
 previous_app_origin="$(read_env_value APP_ORIGIN)"
 previous_app_allowed_origins="$(read_env_value APP_ALLOWED_ORIGINS)"
-previous_managed_origins="${previous_app_origin},http://localhost:8189,http://127.0.0.1:8189"
 app_origin="${APP_ORIGIN:-$(read_env_value APP_ORIGIN)}"
 minio_public_url="${MINIO_PUBLIC_URL:-$(read_env_value MINIO_PUBLIC_URL)}"
 
@@ -114,13 +114,17 @@ fi
 if [[ -z "$minio_public_url" || "$minio_public_url" == "http://127.0.0.1:9000" || "$minio_public_url" == "http://${previous_host_ip}:9000" ]]; then
   minio_public_url="http://${host_ip}:9000"
 fi
-if [[ -n "${APP_ALLOWED_ORIGINS:-}" ]]; then
-  app_allowed_origins="$APP_ALLOWED_ORIGINS"
-elif [[ -z "$previous_app_allowed_origins" || "$previous_app_allowed_origins" == "$previous_managed_origins" || "$previous_app_allowed_origins" == "$previous_app_origin" ]]; then
-  app_allowed_origins="${app_origin},http://localhost:8189,http://127.0.0.1:8189"
-else
-  app_allowed_origins="$previous_app_allowed_origins"
+allowed_origins_override_is_set=false
+if [[ -v APP_ALLOWED_ORIGINS ]]; then
+  allowed_origins_override_is_set=true
 fi
+app_allowed_origins="$(resolve_allowed_origins \
+  "$allowed_origins_override_is_set" \
+  "${APP_ALLOWED_ORIGINS:-}" \
+  "$previous_app_allowed_origins" \
+  "$app_origin" \
+  "http://localhost:8189" \
+  "http://127.0.0.1:8189")"
 
 set_env_value BIND_IP "$bind_ip"
 set_env_value LAN_HOST_IP "$host_ip"
