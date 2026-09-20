@@ -2,16 +2,19 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it } from 'vitest';
 import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
+import { AuthProvider, type AuthSession } from '../../context/AuthProvider';
 import { createSeedSnapshot } from '../../data/seed';
 import { CourseStatus, VideoStatus, type Snapshot } from '../../types/domain';
 import { EYE_CARE_STORAGE_KEY } from '../child/preferences';
 
+const testSession: AuthSession = { authenticated: true, admin: { id: 'admin-1', email: 'parent@example.com' }, activeChildId: null, activeChild: null, csrfToken: 'test-csrf' };
+
 function renderRoute(path: string, snapshot?: Snapshot) {
   window.history.pushState({}, '', path);
   return render(
-    <AppStoreProvider initialSnapshot={snapshot ?? createSeedSnapshot()}>
-      <App />
-    </AppStoreProvider>,
+    <AuthProvider initialSession={testSession}>
+      <AppStoreProvider initialSnapshot={snapshot ?? createSeedSnapshot()}><App /></AppStoreProvider>
+    </AuthProvider>,
   );
 }
 
@@ -80,7 +83,7 @@ describe('parent management pages', () => {
     expect(within(screen.getByText('新的数学课').closest('tr')!).getByText('草稿')).toBeInTheDocument();
   });
 
-  it('shows the publish validation reason when no READY video exists', () => {
+  it('shows the publish validation reason when no READY video exists', async () => {
     const snapshot = createSeedSnapshot();
     snapshot.courses = [];
     snapshot.videos = [];
@@ -90,7 +93,7 @@ describe('parent management pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存课程' }));
     fireEvent.click(screen.getByRole('button', { name: '发布' }));
 
-    expect(screen.getByText('课程至少需要一个可播放视频')).toBeInTheDocument();
+    expect(await screen.findByText('课程至少需要一个可播放视频')).toBeInTheDocument();
   });
 
   it('naturally sorts videos and moves a video up in course detail', () => {
@@ -112,7 +115,7 @@ describe('parent management pages', () => {
     expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent('第10课');
   });
 
-  it('adds a child and deactivates it after confirmation', () => {
+  it('adds a child and deactivates it after confirmation', async () => {
     renderRoute('/parent/children', createSeedSnapshot());
     fireEvent.click(screen.getByRole('button', { name: /新增孩子/ }));
     fireEvent.change(screen.getByLabelText('孩子昵称'), { target: { value: '小月' } });
@@ -123,10 +126,10 @@ describe('parent management pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '停用 小月' }));
     expect(screen.getByText('停用后儿童端将隐藏该孩子，但历史记录会保留。')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认停用' }));
-    expect(screen.getByText('孩子已停用')).toBeInTheDocument();
+    expect(await screen.findByText('孩子已停用')).toBeInTheDocument();
   });
 
-  it('clears the child saved feedback timer when the page unmounts', () => {
+  it('clears the child saved feedback timer when the page unmounts', async () => {
     vi.useFakeTimers();
     const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
     try {
@@ -135,6 +138,7 @@ describe('parent management pages', () => {
       fireEvent.change(screen.getByLabelText('孩子昵称'), { target: { value: '小月' } });
       fireEvent.change(screen.getByLabelText('年级'), { target: { value: '一年级' } });
       fireEvent.click(screen.getByRole('button', { name: '保存孩子' }));
+      await act(async () => { await Promise.resolve(); });
       expect(vi.getTimerCount()).toBeGreaterThan(0);
 
       view.unmount();
@@ -159,30 +163,10 @@ describe('parent management pages', () => {
     expect(screen.queryByText('认识太阳')).not.toBeInTheDocument();
   });
 
-  it('resets data from settings and reports feedback', () => {
+  it('reports that storage is managed by the server instead of browser demo data', () => {
     renderRoute('/parent/settings', createSeedSnapshot());
-    fireEvent.click(screen.getByRole('button', { name: '恢复演示数据' }));
-    expect(screen.getByText('演示数据已恢复')).toBeInTheDocument();
-    expect(screen.getByTestId('storage-size')).toHaveTextContent('KB');
-  });
-
-  it('validates upload formats, naturally orders tasks, and completes independently', () => {
-    vi.useFakeTimers();
-    renderRoute('/parent/uploads', createSeedSnapshot());
-    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-chinese' } });
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const invalid = new File(['text'], 'notes.txt', { type: 'text/plain' });
-    fireEvent.change(input, { target: { files: [invalid] } });
-    expect(screen.getByText(/格式不支持，仅支持 MP4 \/ MOV/)).toBeInTheDocument();
-    const tenth = new File(['video'], '第10课.mp4', { type: 'video/mp4' });
-    const second = new File(['video'], '第2课.mp4', { type: 'video/mp4' });
-    fireEvent.change(input, { target: { files: [tenth, second] } });
-    const tasks = screen.getByText('第2课.mp4').closest('.task-list')!;
-    expect(tasks.textContent?.indexOf('第2课.mp4') ?? -1).toBeLessThan(tasks.textContent?.indexOf('第10课.mp4') ?? -1);
-    act(() => { vi.advanceTimersByTime(120 * 8); });
-    expect(document.querySelectorAll('.task-status.task-completed')).toHaveLength(2);
-    expect(screen.getAllByRole('progressbar').every((bar) => bar.getAttribute('aria-valuenow') === '100')).toBe(true);
-    vi.useRealTimers();
+    expect(screen.queryByRole('button', { name: '恢复演示数据' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('storage-size')).toHaveTextContent('服务器管理');
   });
 
   it('opens the file picker from the upload drop zone with Enter and Space', () => {
@@ -196,40 +180,6 @@ describe('parent management pages', () => {
 
     expect(clickSpy).toHaveBeenCalledTimes(2);
     clickSpy.mockRestore();
-  });
-
-  it('persists 0-1 upload progress across refresh for active, failed, and cancelled tasks', () => {
-    vi.useFakeTimers();
-    renderRoute('/parent/uploads', createSeedSnapshot());
-    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-chinese' } });
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [
-      new File(['video'], 'active.mp4', { type: 'video/mp4' }),
-      new File(['video'], 'complete.mp4', { type: 'video/mp4' }),
-      new File(['video'], 'fail.mp4', { type: 'video/mp4' }),
-      new File(['video'], 'cancel.mp4', { type: 'video/mp4' }),
-    ] } });
-
-    act(() => { vi.advanceTimersByTime(120); });
-    const cancelRow = screen.getByText('cancel.mp4').closest('.upload-task') as HTMLElement;
-    fireEvent.click(within(cancelRow).getByRole('button', { name: '取消' }));
-    act(() => { vi.advanceTimersByTime(120 * 7); });
-
-    const persisted = JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}');
-    expect(persisted.uploadTasks).toEqual(expect.arrayContaining([
-      expect.objectContaining({ fileName: 'active.mp4', status: 'COMPLETED', progress: 1 }),
-      expect.objectContaining({ fileName: 'complete.mp4', status: 'COMPLETED', progress: 1 }),
-      expect.objectContaining({ fileName: 'fail.mp4', status: 'FAILED', progress: 0.56 }),
-      expect.objectContaining({ fileName: 'cancel.mp4', status: 'CANCELLED', progress: 0.14 }),
-    ]));
-
-    cleanup();
-    window.history.pushState({}, '', '/parent/uploads');
-    render(<AppStoreProvider><App /></AppStoreProvider>);
-    expect(screen.getByText('active.mp4')).toBeInTheDocument();
-    expect(screen.getByText('fail.mp4')).toBeInTheDocument();
-    expect(screen.getByText('cancel.mp4')).toBeInTheDocument();
-    vi.useRealTimers();
   });
 
   it('keeps weekly completion fixed while range changes and shows detail progress/status', () => {
@@ -254,22 +204,6 @@ describe('parent management pages', () => {
     fireEvent.keyDown(search, { key: 'Enter' });
     expect(screen.getByText('小小诗人：古诗启蒙')).toBeInTheDocument();
     expect(screen.getByText('第10课 春晓')).toBeInTheDocument();
-  });
-
-  it('keeps valid upload files when a batch also contains an invalid file', () => {
-    vi.useFakeTimers();
-    renderRoute('/parent/uploads', createSeedSnapshot());
-    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-chinese' } });
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const valid = new File(['video'], '第3课.mp4', { type: 'video/mp4' });
-    const invalid = new File(['text'], '说明.txt', { type: 'text/plain' });
-    fireEvent.change(input, { target: { files: [invalid, valid] } });
-    expect(screen.getByText('第3课.mp4')).toBeInTheDocument();
-    expect(screen.getByText(/说明.txt.*格式不支持/)).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}').uploadTasks).toEqual(expect.arrayContaining([expect.objectContaining({ fileName: '第3课.mp4', status: 'QUEUED' })]));
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    expect(document.querySelectorAll('.task-status.task-cancelled')).toHaveLength(1);
-    vi.useRealTimers();
   });
 
   it('defaults free course choice on and maintains a video title from detail', () => {
@@ -304,16 +238,4 @@ describe('parent management pages', () => {
     expect(screen.getByTestId('child-shell')).toHaveClass('eye-care');
   });
 
-  it('does not add a completed upload task again after remounting', () => {
-    localStorage.clear();
-    const snapshot = createSeedSnapshot();
-    snapshot.uploadTasks = [{ id: 'upload-completed', courseId: 'course-chinese', fileName: '第99课.mp4', progress: 1, status: 'COMPLETED' }];
-    renderRoute('/parent/uploads', snapshot);
-    cleanup();
-
-    window.history.pushState({}, '', '/parent/uploads');
-    render(<AppStoreProvider><App /></AppStoreProvider>);
-    const persisted = JSON.parse(localStorage.getItem('family-learning-app:v1') ?? '{}');
-    expect(persisted.videos.filter((video: { courseId: string; fileName: string }) => video.courseId === 'course-chinese' && video.fileName === '第99课.mp4')).toHaveLength(1);
-  });
 });

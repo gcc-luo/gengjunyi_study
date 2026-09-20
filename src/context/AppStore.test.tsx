@@ -32,7 +32,7 @@ describe('AppStore', () => {
 
     let course!: Course;
     act(() => {
-      course = result.current.createCourse({ title: '新课程', subjectId: 'math' });
+      course = result.current.createCourse({ title: '新课程', subjectId: 'math' }) as Course;
     });
 
     expect(course.status).toBe(CourseStatus.DRAFT);
@@ -42,7 +42,7 @@ describe('AppStore', () => {
   it('rejects publishing when no video is ready', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     let course!: Course;
-    act(() => { course = result.current.createCourse({ title: '待发布', subjectId: 'math' }); });
+    act(() => { course = result.current.createCourse({ title: '待发布', subjectId: 'math' }) as Course; });
 
     let publishResult;
     act(() => { publishResult = result.current.publishCourse(course.id); });
@@ -53,12 +53,12 @@ describe('AppStore', () => {
   it('assigns natural order indexes when adding videos', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     let course!: Course;
-    act(() => { course = result.current.createCourse({ title: '排序课程', subjectId: 'math' }); });
+    act(() => { course = result.current.createCourse({ title: '排序课程', subjectId: 'math' }) as Course; });
     let first!: Video;
     let second!: Video;
     act(() => {
-      first = result.current.addVideo(course.id, { title: '第10课', fileName: '第10课.mp4', durationSeconds: 10, status: VideoStatus.READY });
-      second = result.current.addVideo(course.id, { title: '第2课', fileName: '第2课.mp4', durationSeconds: 10, status: VideoStatus.READY });
+      first = result.current.addVideo(course.id, { title: '第10课', fileName: '第10课.mp4', durationSeconds: 10, status: VideoStatus.READY }) as Video;
+      second = result.current.addVideo(course.id, { title: '第2课', fileName: '第2课.mp4', durationSeconds: 10, status: VideoStatus.READY }) as Video;
     });
 
     expect(first.orderIndex).toBe(1);
@@ -130,7 +130,7 @@ describe('AppStore', () => {
   it('persists course and progress commands to localStorage', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     let course!: Course;
-    act(() => { course = result.current.createCourse({ title: '持久化课程', subjectId: 'math' }); });
+    act(() => { course = result.current.createCourse({ title: '持久化课程', subjectId: 'math' }) as Course; });
     const afterCourse = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     expect(afterCourse.courses).toEqual(expect.arrayContaining([expect.objectContaining({ id: course.id, title: '持久化课程' })]));
 
@@ -155,7 +155,7 @@ describe('AppStore', () => {
   it('persists a draft with an empty age range without restoring seed data', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     let course!: Course;
-    act(() => { course = result.current.createCourse({ title: '无年龄草稿', subjectId: 'math' }); });
+    act(() => { course = result.current.createCourse({ title: '无年龄草稿', subjectId: 'math' }) as Course; });
 
     const loaded = loadSnapshot();
     expect(loaded.courses).toEqual(expect.arrayContaining([expect.objectContaining({ id: course.id, title: '无年龄草稿', ageRange: '' })]));
@@ -215,7 +215,7 @@ describe('AppStore', () => {
     const { result } = renderHook(() => useAppStore(), { wrapper });
     let course!: Course;
     act(() => {
-      course = result.current.createCourse({ title: '连续操作', subjectId: 'math' });
+      course = result.current.createCourse({ title: '连续操作', subjectId: 'math' }) as Course;
       result.current.updateCourse(course.id, { title: '连续操作已更新' });
       result.current.addVideo(course.id, { title: '第一课', fileName: '1.mp4', durationSeconds: 60, status: VideoStatus.READY });
       expect(result.current.publishCourse(course.id)).toEqual({ ok: true });

@@ -2,5 +2,12 @@
 .superpowers/
 node_modules/
 dist/
+server/src/generated/prisma/
 playwright-report/
 test-results/
+.env
+.env.*
+!.env.example
+!ops/.env.production.example
+!ops/.env.lan.example
+ops/.env.production

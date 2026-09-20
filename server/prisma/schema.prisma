@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ChildStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+}
+
+enum MediaStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  ARCHIVED
+}
+
+enum UploadSessionStatus {
+  ACTIVE
+  COMPLETED
+  ABORTED
+  EXPIRED
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+  sessions     Session[]
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  adminUserId   String
+  activeChildId String?
+  tokenHash     String    @unique
+  expiresAt     DateTime  @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  adminUser     AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  activeChild   Child?    @relation(fields: [activeChildId], references: [id], onDelete: SetNull)
+
+  @@index([adminUserId, expiresAt])
+  @@index([activeChildId])
+  @@index([expiresAt])
+}
+
+model Child {
+  id            String          @id @default(cuid())
+  name          String
+  avatar        String          @default("🌟")
+  grade         String          @default("")
+  status        ChildStatus     @default(ACTIVE)
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
+  sessions      Session[]
+  watchProgress WatchProgress[]
+  watchEvents   WatchEvent[]
+  favorites     Favorite[]
+
+  @@index([status, createdAt])
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  courses   Course[]
+}
+
+model Course {
+  id          String       @id @default(cuid())
+  subjectId   String
+  title       String
+  description String?
+  ageRange    String       @default("")
+  coverStyle  String       @default("sunrise")
+  status      CourseStatus @default(DRAFT)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+  subject     Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  videos      Video[]
+
+  @@index([subjectId, status])
+  @@index([status, updatedAt])
+}
+
+model Video {
+  id            String          @id @default(cuid())
+  courseId      String
+  title         String
+  objectKey     String          @unique
+  fileName      String
+  byteSize      BigInt
+  durationMs    Int?
+  codec         String?
+  failureReason String?
+  status        MediaStatus     @default(UPLOADING)
+  sortOrder     Int             @default(0)
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
+  course        Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  uploadSession UploadSession?
+  watchProgress WatchProgress[]
+  watchEvents   WatchEvent[]
+  favorites     Favorite[]
+
+  @@index([courseId, sortOrder])
+  @@index([status, createdAt])
+}
+
+model UploadSession {
+  id             String              @id @default(cuid())
+  videoId        String?             @unique
+  objectKey      String              @unique
+  minioUploadId  String              @unique
+  reservedBytes  BigInt
+  completedParts Json                @default("[]")
+  status         UploadSessionStatus @default(ACTIVE)
+  expiresAt      DateTime            @db.Timestamptz(3)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(3)
+  video          Video?              @relation(fields: [videoId], references: [id], onDelete: SetNull)
+
+  @@index([status, expiresAt])
+}
+
+model StorageQuota {
+  id            Int      @id @default(1)
+  maxBytes      BigInt
+  usedBytes     BigInt   @default(0)
+  reservedBytes BigInt   @default(0)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+}
+
+model WatchProgress {
+  id                 String   @id @default(cuid())
+  childId            String
+  videoId            String
+  positionMs         Int      @default(0)
+  maxProgressPercent Int      @default(0)
+  completed          Boolean  @default(false)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(3)
+  child              Child    @relation(fields: [childId], references: [id], onDelete: Restrict)
+  video              Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
+
+  @@unique([childId, videoId])
+  @@index([videoId])
+}
+
+model WatchEvent {
+  id             String   @id @default(cuid())
+  childId        String
+  videoId        String
+  eventType      String
+  positionMs     Int?
+  watchedSeconds Int      @default(0)
+  occurredAt     DateTime @default(now()) @db.Timestamptz(3)
+  child          Child    @relation(fields: [childId], references: [id], onDelete: Restrict)
+  video          Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
+
+  @@index([childId, occurredAt])
+  @@index([videoId, occurredAt])
+  @@index([childId, videoId, occurredAt])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  childId   String
+  videoId   String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  child     Child    @relation(fields: [childId], references: [id], onDelete: Restrict)
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Restrict)
+
+  @@unique([childId, videoId])
+  @@index([videoId])
+}

@@ -1,8 +1,8 @@
 export type CourseStatus = 'DRAFT' | 'PUBLISHED' | 'OFFLINE';
 export const CourseStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', OFFLINE: 'OFFLINE' } as const;
 
-export type VideoStatus = 'UPLOADING' | 'READY' | 'FAILED';
-export const VideoStatus = { UPLOADING: 'UPLOADING', READY: 'READY', FAILED: 'FAILED' } as const;
+export type VideoStatus = 'UPLOADING' | 'PROCESSING' | 'READY' | 'FAILED' | 'ARCHIVED';
+export const VideoStatus = { UPLOADING: 'UPLOADING', PROCESSING: 'PROCESSING', READY: 'READY', FAILED: 'FAILED', ARCHIVED: 'ARCHIVED' } as const;
 
 export type ChildStatus = 'ACTIVE' | 'INACTIVE';
 export const ChildStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' } as const;

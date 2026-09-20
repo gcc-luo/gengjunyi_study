@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../../components/EmptyState';
 import { Icon } from '../../components/Icon';
 import { useAppStore } from '../../context/AppStore';
 import { naturalCompare } from '../../lib/domain';
+import { apiRequest } from '../../lib/api-client';
 import { CourseStatus, VideoStatus, type Video } from '../../types/domain';
 
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2];
@@ -32,19 +34,27 @@ type FullscreenDocument = Document & { webkitFullscreenElement?: Element | null;
 export function WatchPage() {
   const { videoId } = useParams();
   const navigate = useNavigate();
-  const { currentChildId, courses, videos, snapshot, saveWatchProgress, favorites, toggleFavorite } = useAppStore();
+  const { currentChildId, courses, videos, snapshot, saveWatchProgress, favorites, toggleFavorite, isRemote } = useAppStore();
   const video = videos.find((item) => item.id === videoId);
   const course = video ? courses.find((item) => item.id === video.courseId) : undefined;
   const orderedVideos = useMemo(() => course ? orderVideos(course.videoIds, videos) : [], [course, videos]);
   const currentIndex = video ? orderedVideos.findIndex((item) => item.id === video.id) : -1;
   const duration = video?.durationSeconds ?? 0;
   const initialProgress = snapshot.watchProgress.find((item) => item.childId === currentChildId && item.videoId === videoId);
+  const playbackQuery = useQuery({
+    queryKey: ['child', currentChildId, 'playback', videoId],
+    queryFn: () => apiRequest<{ url: string; expiresInSeconds: number }>(`/api/videos/${encodeURIComponent(videoId!)}/playback`, { method: 'POST' }),
+    enabled: isRemote && Boolean(currentChildId && video && course?.status === CourseStatus.PUBLISHED && video.status === VideoStatus.READY),
+    staleTime: 90 * 60 * 1000,
+    retry: false,
+  });
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [positionSeconds, setPositionSeconds] = useState(() => clampPosition(initialProgress?.lastPositionSeconds ?? 0, duration));
   const [playbackRate, setPlaybackRate] = useState(1);
   const [lastHeartbeatAt, setLastHeartbeatAt] = useState(() => initialProgress ? Date.parse(initialProgress.updatedAt) || Date.now() : Date.now());
   const [fullscreenMessage, setFullscreenMessage] = useState('');
+  const [mediaFailed, setMediaFailed] = useState(false);
 
   const isMountedRef = useRef(false);
   const isPlayingRef = useRef(isPlaying);
@@ -53,6 +63,9 @@ export function WatchPage() {
   const pendingWatchSecondsRef = useRef(0);
   const dirtyRef = useRef(false);
   const playerScreenRef = useRef<FullscreenElement>(null);
+  const videoElementRef = useRef<HTMLVideoElement>(null);
+  const playbackResumeRef = useRef<{ position: number; wasPlaying: boolean } | null>(null);
+  const renewedPlaybackRef = useRef(false);
   const videoIdRef = useRef(videoId ?? '');
   const childIdRef = useRef(currentChildId);
   const durationRef = useRef(duration);
@@ -85,6 +98,55 @@ export function WatchPage() {
     return true;
   }, []);
 
+  const handleMediaTimeUpdate = (media: HTMLVideoElement) => {
+    const safePosition = clampPosition(media.currentTime, durationRef.current);
+    positionRef.current = safePosition;
+    setPositionSeconds(safePosition);
+    dirtyRef.current = true;
+  };
+
+  const handleMediaPause = () => {
+    if (isPlayingRef.current) flushProgress(true);
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+  };
+
+  const handleMediaEnded = () => {
+    const media = videoElementRef.current;
+    if (!media) return;
+    const endPosition = clampPosition(media.duration, durationRef.current);
+    positionRef.current = endPosition;
+    setPositionSeconds(endPosition);
+    persistProgress(endPosition, pendingWatchSecondsRef.current, false, true);
+    pendingWatchSecondsRef.current = 0;
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+  };
+
+  const renewPlaybackUrl = (manual = false) => {
+    if (manual) renewedPlaybackRef.current = false;
+    if (renewedPlaybackRef.current) {
+      setMediaFailed(true);
+      setFullscreenMessage('视频连接仍未恢复，请检查网络后重试。');
+      return;
+    }
+    const media = videoElementRef.current;
+    playbackResumeRef.current = {
+      position: clampPosition(media?.currentTime ?? positionRef.current, durationRef.current),
+      wasPlaying: media ? !media.paused : isPlayingRef.current,
+    };
+    renewedPlaybackRef.current = true;
+    setMediaFailed(false);
+    setFullscreenMessage('播放授权正在更新，稍候将从当前位置继续…');
+    const previousUrl = playbackQuery.data?.url;
+    void playbackQuery.refetch().then(({ data, error }) => {
+      if (error || !data?.url || data.url === previousUrl) {
+        setMediaFailed(true);
+        setFullscreenMessage('未能建立新的视频连接，请检查网络后重试。');
+      }
+    });
+  };
+
   const flushProgress = useCallback((playing = isPlayingRef.current) => {
     const pending = pendingWatchSecondsRef.current;
     persistProgress(positionRef.current, pending, playing);
@@ -104,6 +166,7 @@ export function WatchPage() {
       if (!document.hidden) return;
       if (isPlayingRef.current) {
         flushProgress(true);
+        videoElementRef.current?.pause();
         isPlayingRef.current = false;
         setIsPlaying(false);
       } else {
@@ -137,6 +200,10 @@ export function WatchPage() {
   useEffect(() => {
     const routeKey = `${currentChildId ?? ''}:${videoId ?? ''}`;
     if (routeKey === initializedRouteRef.current) return;
+    videoElementRef.current?.pause();
+    playbackResumeRef.current = null;
+    renewedPlaybackRef.current = false;
+    setMediaFailed(false);
     if (childIdRef.current === currentChildId) flushProgress(isPlayingRef.current);
     else {
       pendingWatchSecondsRef.current = 0;
@@ -173,6 +240,20 @@ export function WatchPage() {
     if (!isPlaying || !video) return;
     const timer = window.setInterval(() => {
       if (!isPlayingRef.current || durationRef.current <= 0) return;
+      if (isRemote) {
+        const media = videoElementRef.current;
+        if (!media || media.paused) return;
+        const livePosition = clampPosition(media.currentTime, durationRef.current);
+        positionRef.current = livePosition;
+        setPositionSeconds(livePosition);
+        pendingWatchSecondsRef.current += 1;
+        dirtyRef.current = true;
+        if (pendingWatchSecondsRef.current >= 10) {
+          pendingWatchSecondsRef.current -= 10;
+          persistProgress(livePosition, 10, true, true);
+        }
+        return;
+      }
       const nextPosition = clampPosition(positionRef.current + playbackRateRef.current, durationRef.current);
       positionRef.current = nextPosition;
       setPositionSeconds(nextPosition);
@@ -190,7 +271,7 @@ export function WatchPage() {
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [isPlaying, persistProgress, videoId]);
+  }, [isPlaying, isRemote, persistProgress, videoId]);
 
   const seekTo = (nextPosition: number) => {
     const safePosition = clampPosition(nextPosition, duration);
@@ -198,6 +279,7 @@ export function WatchPage() {
     positionRef.current = safePosition;
     setPositionSeconds(safePosition);
     dirtyRef.current = true;
+    if (isRemote && videoElementRef.current) videoElementRef.current.currentTime = safePosition;
     if (completes) {
       persistProgress(safePosition, pendingWatchSecondsRef.current, isPlayingRef.current, true);
       pendingWatchSecondsRef.current = 0;
@@ -208,6 +290,13 @@ export function WatchPage() {
 
   const togglePlay = () => {
     if (!video || duration <= 0) return;
+    if (isRemote) {
+      const media = videoElementRef.current;
+      if (!media) return;
+      if (media.paused) void media.play().catch(() => setFullscreenMessage('播放失败，请确认视频格式与网络连接'));
+      else media.pause();
+      return;
+    }
     if (isPlayingRef.current) {
       isPlayingRef.current = false;
       flushProgress(true);
@@ -294,12 +383,37 @@ export function WatchPage() {
 
   return <main className="child-page watch-page">
     <div className="watch-topline"><button className="watch-back" type="button" onClick={handleBack}>← 返回课程</button><span className="watch-course-label">{course.title} · 第 {Math.max(1, currentIndex + 1)} 集</span><button className={`watch-favorite${isFavorite ? ' active' : ''}`} type="button" aria-pressed={isFavorite} onClick={() => toggleFavorite({ videoId: video.id })}>{isFavorite ? '★ 已收藏' : '☆ 收藏'}</button></div>
-    <section className="watch-player" aria-label="演示播放器">
-      <div ref={playerScreenRef} className="watch-screen" data-testid="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play" data-testid="watch-screen-play">{isPlaying ? 'Ⅱ' : '▶'}</div><span className="watch-demo-badge">演示播放</span><button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>{fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}<p>没有真实媒体地址 · 使用学习时钟体验</p></div>
-      <div className="watch-controls">
+    <section className="watch-player" aria-label={isRemote ? '视频播放器' : '演示播放器'}>
+      {isRemote ? <div ref={playerScreenRef} className="watch-screen watch-screen-live" data-testid="watch-screen">
+        {playbackQuery.isLoading && <p role="status">正在获取安全播放地址…</p>}
+        {playbackQuery.error && <div className="watch-media-error"><p role="alert">{playbackQuery.error instanceof Error ? playbackQuery.error.message : '暂时无法获取视频，请检查网络后重试。'}</p><button type="button" onClick={() => void playbackQuery.refetch()}>重试</button></div>}
+        {playbackQuery.data?.url && <video key={video.id} ref={videoElementRef} className="watch-video" aria-label="视频播放器" src={playbackQuery.data.url} controls playsInline preload="metadata" onLoadedMetadata={(event) => {
+          const media = event.currentTarget;
+          if (Number.isFinite(media.duration) && media.duration > 0) durationRef.current = media.duration;
+          const renewedPlayback = playbackResumeRef.current;
+          const resumeAt = clampPosition(renewedPlayback?.position ?? initialProgress?.lastPositionSeconds ?? positionRef.current, media.duration || durationRef.current);
+          media.currentTime = resumeAt;
+          positionRef.current = resumeAt;
+          setPositionSeconds(resumeAt);
+          media.playbackRate = playbackRateRef.current;
+          if (renewedPlayback) {
+            playbackResumeRef.current = null;
+            renewedPlaybackRef.current = false;
+            setMediaFailed(false);
+            setFullscreenMessage('');
+            if (renewedPlayback.wasPlaying) void media.play().catch(() => setFullscreenMessage('已恢复播放位置，请点击视频继续播放。'));
+          }
+        }} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={() => { isPlayingRef.current = true; setIsPlaying(true); }} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
+        {mediaFailed && <button className="watch-media-retry" type="button" onClick={() => renewPlaybackUrl(true)}>重新连接视频</button>}
+        <button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>
+        {fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}
+      </div> : <>
+        <div ref={playerScreenRef} className="watch-screen" data-testid="watch-screen"><div className="watch-screen-orbit">✦</div><div className="watch-screen-play" data-testid="watch-screen-play">{isPlaying ? 'Ⅱ' : '▶'}</div><span className="watch-demo-badge">演示播放</span><button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>{fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}<p>没有真实媒体地址 · 使用学习时钟体验</p></div>
+        <div className="watch-controls">
         <div className="watch-time-row"><span data-testid="watch-position">{formatTime(positionSeconds)}</span><input aria-label="播放进度" type="range" min="0" max={duration} step="0.1" value={positionSeconds} onChange={(event) => seekTo(Number(event.target.value))} /><span>{formatTime(duration)}</span></div>
-        <div className="watch-main-controls"><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds - 10)} aria-label="快退10秒">↶ <span>10</span></button><button className="watch-play-button" type="button" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>{isPlaying ? 'Ⅱ' : <Icon name="play" size={22} />}</button><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds + 10)} aria-label="快进10秒">↷ <span>10</span></button><label className="watch-rate">倍速<select aria-label="播放倍速" value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))}>{PLAYBACK_RATES.map((rate) => <option value={rate} key={rate}>{rate.toFixed(rate === 1 ? 1 : 2)}x</option>)}</select></label></div>
-      </div>
+        <div className="watch-main-controls"><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds - 10)} aria-label="快退10秒">↶ <span>10</span></button><button className="watch-play-button" type="button" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>{isPlaying ? 'Ⅱ' : <Icon name="play" size={22} />}</button><button className="watch-skip" type="button" onClick={() => seekTo(positionSeconds + 10)} aria-label="快进10秒">↷ <span>10</span></button><label className="watch-rate">倍速<select aria-label="播放倍速" value={playbackRate} onChange={(event) => { const rate = Number(event.target.value); setPlaybackRate(rate); if (videoElementRef.current) videoElementRef.current.playbackRate = rate; }}>{PLAYBACK_RATES.map((rate) => <option value={rate} key={rate}>{rate.toFixed(rate === 1 ? 1 : 2)}x</option>)}</select></label></div>
+        </div>
+      </>}
     </section>
     <section className="watch-info"><div><p className="child-kicker">正在学习 · {percent}%</p><h1>{video.title}</h1><p className="watch-sync">进度会自动保存 · 最近同步 {syncText}</p></div><div className="watch-progress-pill"><strong>{percent}%</strong><span>本集进度</span></div></section>
     <div className="watch-navigation"><button type="button" onClick={() => navigateToVideo(previousVideo)} disabled={!previousVideo}>← 上一集</button><span>{Math.max(1, currentIndex + 1)} / {orderedVideos.length}</span><button type="button" onClick={() => navigateToVideo(nextVideo)} disabled={!nextVideo}>下一集 →</button></div>

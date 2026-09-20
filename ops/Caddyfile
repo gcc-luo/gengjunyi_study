@@ -1,0 +1,12 @@
+{$APP_DOMAIN} {
+	encode zstd gzip
+	@api path /api/*
+	reverse_proxy @api api:3000
+	reverse_proxy web:80
+}
+
+{$S3_DOMAIN} {
+	reverse_proxy minio:9000 {
+		header_up Host {http.request.host}
+	}
+}
