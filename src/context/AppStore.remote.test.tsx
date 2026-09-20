@@ -60,4 +60,46 @@ describe('remote AppStore', () => {
     expect(result.current.children).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('restores child progress from child-scoped APIs after a hard refresh', async () => {
+    queryClient.clear();
+    const childSession: AuthSession = {
+      authenticated: true,
+      admin: { id: 'parent-1', email: 'parent@example.test' },
+      activeChildId: 'child-1',
+      activeChild: { id: 'child-1', name: '小星' },
+      csrfToken: 'csrf-test',
+      parentUnlocked: false,
+    };
+    const course = {
+      id: 'course-1', title: '数学课', subjectId: 'math', description: '', ageRange: '6-8岁',
+      cover: { style: 'sunrise', colors: ['#2D86F5'] }, status: 'PUBLISHED',
+      createdAt: '2026-09-17T00:00:00.000Z', updatedAt: '2026-09-17T00:00:00.000Z',
+      videos: [{
+        id: 'video-1', title: '第一课', fileName: 'one.mp4', durationMs: 100_000, status: 'READY', sortOrder: 0,
+        createdAt: '2026-09-17T00:00:00.000Z',
+        progress: { positionMs: 37_000, maxProgressPercent: 37, completed: false, updatedAt: '2026-09-20T08:00:00.000Z' },
+      }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), window.location.origin);
+      if (url.pathname === '/api/child/profile') return json({ id: 'child-1', name: '小星', avatar: '⭐', grade: '一年级', status: 'ACTIVE', createdAt: '2026-09-01T00:00:00.000Z' });
+      if (url.pathname === '/api/child/courses') return json([course]);
+      if (url.pathname === '/api/children/child-1/records') return json({
+        childId: 'child-1', totalWatchedSeconds: 37, completedVideos: 0,
+        videos: [{ videoId: 'video-1', positionMs: 37_000, maxProgressPercent: 37, completed: false, updatedAt: '2026-09-20T08:00:00.000Z' }],
+        recentActivity: [{ id: 'event-1', videoId: 'video-1', watchedSeconds: 10, occurredAt: '2026-09-20T08:00:00.000Z' }],
+      });
+      if (url.pathname === '/api/children/child-1/favorites') return json([]);
+      return json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, 404);
+    }));
+    const childWrapper = ({ children }: { children: React.ReactNode }) => <AuthProvider initialSession={childSession}><AppStoreProvider>{children}</AppStoreProvider></AuthProvider>;
+
+    const { result } = renderHook(() => useAppStore(), { wrapper: childWrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.progress).toContainEqual(expect.objectContaining({ videoId: 'video-1', lastPositionSeconds: 37, maxProgress: 0.37 }));
+    expect(result.current.snapshot.videos).toContainEqual(expect.objectContaining({ id: 'video-1', courseId: 'course-1' }));
+    expect(result.current.watchEvents).toContainEqual(expect.objectContaining({ id: 'event-1', effectiveWatchSeconds: 10 }));
+  });
 });

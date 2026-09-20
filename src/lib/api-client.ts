@@ -11,6 +11,7 @@ export class ApiError extends Error {
 }
 
 export const AUTH_UNAUTHORIZED_EVENT = 'family-learning:unauthorized';
+export const PARENT_LOCKED_EVENT = 'family-learning:parent-locked';
 let csrfToken: string | null = null;
 
 export function setCsrfToken(token: string | null) {
@@ -72,6 +73,9 @@ export async function apiRequest<T = void>(path: string, init: RequestInit = {})
   if (!response.ok) {
     if (response.status === 401 && typeof window !== 'undefined') {
       window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+    }
+    if (response.status === 423 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(PARENT_LOCKED_EVENT));
     }
     throw normalizeError(response.status, body);
   }

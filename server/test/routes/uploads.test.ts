@@ -23,7 +23,7 @@ function uploadHarness(options: { usedBytes?: bigint; reservedBytes?: bigint } =
         id: "session-1",
         adminUserId: "admin-1",
         activeChildId: null,
-        parentUnlockedAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        parentUnlockedUntil: new Date(Date.now() + 24 * 60 * 60 * 1000),
         tokenHash: sessionTokenHash,
         expiresAt: new Date(Date.now() + 60_000),
         adminUser: { id: "admin-1", email: "parent@example.com" },

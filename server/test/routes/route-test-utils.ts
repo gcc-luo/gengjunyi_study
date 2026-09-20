@@ -96,7 +96,7 @@ export type RouteState = {
     id: string;
     adminUserId: string;
     activeChildId: string | null;
-    parentUnlockedAt: Date | null;
+    parentUnlockedUntil: Date | null;
     tokenHash: string;
     expiresAt: Date;
   }>;
@@ -170,7 +170,7 @@ export function makePrisma(options: {
       id: "session-1",
       adminUserId: "admin-1",
       activeChildId: options.activeChildId ?? null,
-      parentUnlockedAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      parentUnlockedUntil: new Date(Date.now() + 24 * 60 * 60 * 1000),
       tokenHash: sessionTokenHash,
       expiresAt: new Date(Date.now() + 60_000),
     }],

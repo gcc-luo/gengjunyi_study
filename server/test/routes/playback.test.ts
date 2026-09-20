@@ -56,4 +56,23 @@ describe("authorized video playback", () => {
     expect(response.statusCode).toBe(403);
     expect(harness.storage.presignGetObject).not.toHaveBeenCalled();
   });
+
+  it("does not issue playback for a course that is not assigned to the selected child", async () => {
+    const harness = makeLearningHarness({ freeChoice: false, assignedCourseIds: [] });
+    apps.push(harness.app);
+
+    const response = await harness.app.inject({ method: "POST", url: "/api/videos/video-1/playback", headers: parentHeaders });
+
+    expect(response.statusCode).toBe(404);
+    expect(harness.storage.presignGetObject).not.toHaveBeenCalled();
+  });
+
+  it("allows playback when the restricted course is assigned", async () => {
+    const harness = makeLearningHarness({ freeChoice: false, assignedCourseIds: ["course-1"] });
+    apps.push(harness.app);
+
+    const response = await harness.app.inject({ method: "POST", url: "/api/videos/video-1/playback", headers: parentHeaders });
+
+    expect(response.statusCode).toBe(200);
+  });
 });

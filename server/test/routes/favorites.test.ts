@@ -81,4 +81,25 @@ describe("child favorites", () => {
     expect(response.statusCode).toBe(204);
     expect(harness.state.favorites.map((favorite) => favorite.childId)).toEqual(["child-2"]);
   });
+
+  it("hides and rejects favorites for courses not assigned to the selected child", async () => {
+    const harness = makeLearningHarness({
+      freeChoice: false,
+      assignedCourseIds: [],
+      favorites: [{ id: "favorite-1", childId: "child-1", videoId: "video-1", createdAt: new Date() }],
+    });
+    apps.push(harness.app);
+
+    const listed = await harness.app.inject({ method: "GET", url: "/api/children/child-1/favorites", headers: parentHeaders });
+    const added = await harness.app.inject({
+      method: "PUT",
+      url: "/api/children/child-1/favorites",
+      headers: parentHeaders,
+      payload: { videoId: "video-1" },
+    });
+
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toEqual([]);
+    expect(added.statusCode).toBe(404);
+  });
 });

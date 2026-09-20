@@ -30,6 +30,17 @@ function orderVideos(courseVideoIds: string[], videos: Video[]): Video[] {
 
 type FullscreenElement = HTMLDivElement & { webkitRequestFullscreen?: () => void | Promise<void> };
 type FullscreenDocument = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => void | Promise<void> };
+type PendingProgressSave = {
+  childId: string;
+  videoId: string;
+  lastPositionSeconds: number;
+  progress: number;
+  deltaWatchSeconds: number;
+  isPlaying: boolean;
+  eventType?: 'PROGRESS' | 'PLAY' | 'PAUSE' | 'SEEK' | 'ENDED';
+  updatedAt: string;
+};
+type SyncState = 'idle' | 'saving' | 'synced' | 'error';
 
 export function WatchPage() {
   const { videoId } = useParams();
@@ -52,7 +63,9 @@ export function WatchPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [positionSeconds, setPositionSeconds] = useState(() => clampPosition(initialProgress?.lastPositionSeconds ?? 0, duration));
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [lastHeartbeatAt, setLastHeartbeatAt] = useState(() => initialProgress ? Date.parse(initialProgress.updatedAt) || Date.now() : Date.now());
+  const [lastHeartbeatAt, setLastHeartbeatAt] = useState(() => initialProgress ? Date.parse(initialProgress.updatedAt) || 0 : 0);
+  const [syncState, setSyncState] = useState<SyncState>(initialProgress ? 'synced' : 'idle');
+  const [syncError, setSyncError] = useState('');
   const [fullscreenMessage, setFullscreenMessage] = useState('');
   const [mediaFailed, setMediaFailed] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -74,6 +87,8 @@ export function WatchPage() {
   const childIdRef = useRef(currentChildId);
   const durationRef = useRef(duration);
   const saveWatchProgressRef = useRef(saveWatchProgress);
+  const syncQueueRef = useRef<PendingProgressSave[]>([]);
+  const syncingRef = useRef(false);
   const initializedRouteRef = useRef(`${currentChildId ?? ''}:${videoId ?? ''}`);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -82,13 +97,39 @@ export function WatchPage() {
   playbackRateRef.current = playbackRate;
   saveWatchProgressRef.current = saveWatchProgress;
 
+  const drainSyncQueue = useCallback(async () => {
+    if (syncingRef.current || syncQueueRef.current.length === 0) return;
+    syncingRef.current = true;
+    if (isMountedRef.current) { setSyncState('saving'); setSyncError(''); }
+    while (syncQueueRef.current.length > 0) {
+      const pending = syncQueueRef.current[0];
+      try {
+        const saveResult = saveWatchProgressRef.current(pending);
+        if (saveResult && typeof (saveResult as Promise<unknown>).then === 'function') await saveResult;
+        syncQueueRef.current.shift();
+        if (isMountedRef.current) {
+          setLastHeartbeatAt(Date.now());
+          setSyncState(syncQueueRef.current.length > 0 ? 'saving' : 'synced');
+          setSyncError('');
+        }
+      } catch (cause) {
+        if (isMountedRef.current) {
+          setSyncState('error');
+          setSyncError(cause instanceof Error ? cause.message : '进度保存失败，请重试');
+        }
+        break;
+      }
+    }
+    syncingRef.current = false;
+  }, []);
+
   const persistProgress = useCallback((position: number, deltaWatchSeconds: number, playing: boolean, force = false, eventType?: 'PROGRESS' | 'PLAY' | 'PAUSE' | 'SEEK' | 'ENDED') => {
     const childId = childIdRef.current;
     const currentVideoId = videoIdRef.current;
     const currentDuration = durationRef.current;
     if (!childId || !currentVideoId || currentDuration <= 0 || (!force && !dirtyRef.current && deltaWatchSeconds <= 0)) return false;
     const safePosition = clampPosition(position, currentDuration);
-    saveWatchProgressRef.current({
+    syncQueueRef.current.push({
       childId,
       videoId: currentVideoId,
       lastPositionSeconds: safePosition,
@@ -99,9 +140,9 @@ export function WatchPage() {
       updatedAt: new Date().toISOString(),
     });
     dirtyRef.current = false;
-    if (isMountedRef.current) setLastHeartbeatAt(Date.now());
+    void drainSyncQueue();
     return true;
-  }, []);
+  }, [drainSyncQueue]);
 
   const handleMediaTimeUpdate = (media: HTMLVideoElement) => {
     const safePosition = clampPosition(media.currentTime, durationRef.current);
@@ -276,7 +317,9 @@ export function WatchPage() {
     pendingWatchSecondsRef.current = 0;
     dirtyRef.current = false;
     setPositionSeconds(nextPosition);
-    setLastHeartbeatAt(nextProgress ? Date.parse(nextProgress.updatedAt) || Date.now() : Date.now());
+    setLastHeartbeatAt(nextProgress ? Date.parse(nextProgress.updatedAt) || 0 : 0);
+    setSyncState(nextProgress ? 'synced' : 'idle');
+    setSyncError('');
     initializedRouteRef.current = routeKey;
   }, [currentChildId, flushProgress, snapshot.watchProgress, videoId, videos]);
 
@@ -433,7 +476,13 @@ export function WatchPage() {
   const nextVideo = currentIndex >= 0 ? orderedVideos[currentIndex + 1] : undefined;
   const isFavorite = favorites.some((item) => item.videoId === video.id);
   const percent = duration > 0 ? Math.round(positionSeconds / duration * 100) : 0;
-  const syncText = lastHeartbeatAt ? new Date(lastHeartbeatAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '尚未同步';
+  const syncText = syncState === 'saving'
+    ? '正在保存…'
+    : syncState === 'error'
+      ? `未同步：${syncError}`
+      : lastHeartbeatAt
+        ? `已同步 ${new Date(lastHeartbeatAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+        : '尚未同步';
 
   return <main className="child-page watch-page">
     <div className="watch-topline"><button className="watch-back" type="button" onClick={handleBack}>← 返回课程</button><span className="watch-course-label">{course.title} · 第 {Math.max(1, currentIndex + 1)} 集</span><button className={`watch-favorite${isFavorite ? ' active' : ''}`} type="button" aria-pressed={isFavorite} onClick={() => toggleFavorite({ videoId: video.id })}>{isFavorite ? '★ 已收藏' : '☆ 收藏'}</button></div>
@@ -472,7 +521,7 @@ export function WatchPage() {
         </div>
       </>}
     </section>
-    <section className="watch-info"><div><p className="child-kicker">正在学习 · {percent}%</p><h1>{video.title}</h1><p className="watch-sync">进度会自动保存 · 最近同步 {syncText}</p></div><div className="watch-progress-pill"><strong>{percent}%</strong><span>本集进度</span></div></section>
+    <section className="watch-info"><div><p className="child-kicker">正在学习 · {percent}%</p><h1>{video.title}</h1><p className={`watch-sync${syncState === 'error' ? ' error' : ''}`} role={syncState === 'error' ? 'alert' : 'status'}>进度会自动保存 · {syncText}{syncState === 'error' && <button type="button" onClick={() => void drainSyncQueue()}>重试同步</button>}</p></div><div className="watch-progress-pill"><strong>{percent}%</strong><span>本集进度</span></div></section>
     <div className="watch-navigation"><button type="button" onClick={() => navigateToVideo(previousVideo)} disabled={!previousVideo}>← 上一集</button><span>{Math.max(1, currentIndex + 1)} / {orderedVideos.length}</span><button type="button" onClick={() => navigateToVideo(nextVideo)} disabled={!nextVideo}>下一集 →</button></div>
     <p className="watch-tip">看完 90% 就算完成，随时可以拖动时间轴回看。</p>
   </main>;

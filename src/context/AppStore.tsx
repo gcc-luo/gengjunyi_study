@@ -167,13 +167,23 @@ type CourseApi = {
   id: string; title: string; subjectId: string; description: string | null; ageRange: string;
   cover: { style: string; colors: string[] }; status: 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED';
   createdAt: string; updatedAt: string;
-  videos: Array<{ id: string; courseId?: string; title: string; fileName: string; durationMs: number | null; status: string; sortOrder: number; createdAt: string }>;
+  videos: Array<{
+    id: string; courseId?: string; title: string; fileName: string; durationMs: number | null; status: string; sortOrder: number; createdAt: string;
+    progress?: { positionMs: number; maxProgressPercent: number; completed: boolean; updatedAt: string } | null;
+  }>;
 };
 type RecordApi = {
   total: number; items: Array<{
     id: string; childId: string; videoId: string; effectiveWatchSeconds: number; occurredAt: string;
-    progress: { maxProgressPercent: number; positionMs: number; completed: boolean } | null;
+    progress: { maxProgressPercent: number; positionMs: number; completed: boolean; updatedAt: string } | null;
   }>;
+};
+type ChildRecordsApi = {
+  childId: string;
+  totalWatchedSeconds: number;
+  completedVideos: number;
+  videos: Array<{ videoId: string; positionMs: number; maxProgressPercent: number; completed: boolean; updatedAt: string }>;
+  recentActivity: Array<{ id: string; videoId: string; watchedSeconds: number; occurredAt: string }>;
 };
 
 function mapChild(child: ChildApi): Child {
@@ -250,6 +260,11 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     queryFn: () => apiRequest<ChildApi>('/api/child/profile'),
     enabled: Boolean(activeChildId) && apiEnabled && !childrenQuery.data?.some((child) => child.id === activeChildId),
   });
+  const childRecordsQuery = useQuery({
+    queryKey: ['child', activeChildId, 'records'],
+    queryFn: () => apiRequest<ChildRecordsApi>(`/api/children/${encodeURIComponent(activeChildId!)}/records`),
+    enabled: Boolean(activeChildId) && apiEnabled,
+  });
   const overviewQuery = useQuery({
     queryKey: ['parent', 'overview'],
     queryFn: () => apiRequest<OverviewData>('/api/overview'),
@@ -273,18 +288,52 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
   const videos = (coursesQuery.data ?? []).flatMap((course) => course.videos.map(mapVideo));
   const childCourses = (childCoursesQuery.data ?? []).map(mapChildCourse);
   const childVideos = (childCoursesQuery.data ?? []).flatMap((course) => course.videos.map((video) => mapVideoWithCourse(video, course.id)));
-  const watchEvents: WatchEvent[] = (recentRecordsQuery.data?.items ?? []).map((event) => ({
+  const parentWatchEvents: WatchEvent[] = (recentRecordsQuery.data?.items ?? []).map((event) => ({
     id: event.id,
     childId: event.childId,
     videoId: event.videoId,
     effectiveWatchSeconds: event.effectiveWatchSeconds,
     occurredAt: event.occurredAt,
   }));
+  const childWatchEvents: WatchEvent[] = (childRecordsQuery.data?.recentActivity ?? []).map((event) => ({
+    id: event.id,
+    childId: childRecordsQuery.data!.childId,
+    videoId: event.videoId,
+    effectiveWatchSeconds: event.watchedSeconds,
+    occurredAt: event.occurredAt,
+  }));
+  const watchEvents = activeChildId ? childWatchEvents : parentWatchEvents;
   const progressByKey = new Map<string, WatchProgress>();
   const watchSecondsByKey = new Map<string, number>();
   for (const event of recentRecordsQuery.data?.items ?? []) {
     const key = `${event.childId}:${event.videoId}`;
     watchSecondsByKey.set(key, (watchSecondsByKey.get(key) ?? 0) + event.effectiveWatchSeconds);
+  }
+  for (const course of childCoursesQuery.data ?? []) {
+    for (const video of course.videos) {
+      if (!activeChildId || !video.progress) continue;
+      progressByKey.set(`${activeChildId}:${video.id}`, {
+        childId: activeChildId,
+        videoId: video.id,
+        lastPositionSeconds: video.progress.positionMs / 1000,
+        maxProgress: video.progress.maxProgressPercent / 100,
+        completed: video.progress.completed,
+        totalWatchSeconds: 0,
+        updatedAt: video.progress.updatedAt,
+      });
+    }
+  }
+  for (const item of childRecordsQuery.data?.videos ?? []) {
+    if (!activeChildId) continue;
+    progressByKey.set(`${activeChildId}:${item.videoId}`, {
+      childId: activeChildId,
+      videoId: item.videoId,
+      lastPositionSeconds: item.positionMs / 1000,
+      maxProgress: item.maxProgressPercent / 100,
+      completed: item.completed,
+      totalWatchSeconds: childWatchEvents.filter((event) => event.videoId === item.videoId).reduce((sum, event) => sum + event.effectiveWatchSeconds, 0),
+      updatedAt: item.updatedAt,
+    });
   }
   for (const event of recentRecordsQuery.data?.items ?? []) {
     if (event.progress && !progressByKey.has(`${event.childId}:${event.videoId}`)) {
@@ -295,7 +344,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
         maxProgress: event.progress.maxProgressPercent / 100,
         completed: event.progress.completed,
         totalWatchSeconds: watchSecondsByKey.get(`${event.childId}:${event.videoId}`) ?? 0,
-        updatedAt: event.occurredAt,
+        updatedAt: event.progress.updatedAt,
       });
     }
   }
@@ -315,8 +364,8 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
   const snapshot: Snapshot = {
     ...emptySnapshot(),
     children,
-    courses,
-    videos,
+    courses: courses.length ? courses : childCourses,
+    videos: videos.length ? videos : childVideos,
     watchEvents,
     watchProgress: [...progressByKey.values()],
     favorites: (favoritesQuery.data ?? []).map((favorite) => ({
@@ -325,7 +374,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     })),
     uploadTasks,
   };
-  const loadingQueries = [childrenQuery, coursesQuery, overviewQuery, recentRecordsQuery, ...(activeChildId ? [childCoursesQuery, childProfileQuery] : [])];
+  const loadingQueries = [childrenQuery, coursesQuery, overviewQuery, recentRecordsQuery, ...(activeChildId ? [childCoursesQuery, childProfileQuery, childRecordsQuery] : [])];
   const errorValue = loadingQueries.find((item) => item.error)?.error ?? favoritesQuery.error;
   const invalidate = async () => {
     await Promise.all([
@@ -337,6 +386,8 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     await Promise.all([
       client.invalidateQueries({ queryKey: ['parent', 'overview'] }),
       client.invalidateQueries({ queryKey: ['parent', 'records'] }),
+      client.invalidateQueries({ queryKey: ['child', activeChildId, 'courses'] }),
+      client.invalidateQueries({ queryKey: ['child', activeChildId, 'records'] }),
     ]);
   };
   const currentChild = children.find((child) => child.id === activeChildId);
@@ -416,8 +467,12 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     if (!activeChildId || input.childId !== activeChildId) throw new Error('当前孩子与进度写入孩子不一致');
     const response = await apiRequest<{ progress: { childId: string; videoId: string; positionMs: number; maxProgressPercent: number; completed: boolean; updatedAt: string } }>(
       `/api/children/${encodeURIComponent(activeChildId)}/videos/${encodeURIComponent(input.videoId)}/progress`,
-      { method: 'PUT', body: JSON.stringify({ positionMs: Math.round(input.lastPositionSeconds * 1000), isPlaying: input.isPlaying, watchedSeconds: input.deltaWatchSeconds, eventType: input.eventType ?? (input.isPlaying ? 'PROGRESS' : 'PAUSE') }) },
+      { method: 'PUT', keepalive: true, body: JSON.stringify({ positionMs: Math.round(input.lastPositionSeconds * 1000), isPlaying: input.isPlaying, watchedSeconds: input.deltaWatchSeconds, eventType: input.eventType ?? (input.isPlaying ? 'PROGRESS' : 'PAUSE') }) },
     );
+    client.setQueryData<CourseApi[]>(['child', activeChildId, 'courses'], (current) => current?.map((course) => ({
+      ...course,
+      videos: course.videos.map((video) => video.id === input.videoId ? { ...video, progress: response.progress } : video),
+    })));
     await invalidateProgress();
     return {
       childId: response.progress.childId,

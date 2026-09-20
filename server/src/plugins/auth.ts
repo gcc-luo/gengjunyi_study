@@ -12,7 +12,7 @@ export type ParentSession = {
   id: string;
   adminUserId: string;
   activeChildId: string | null;
-  parentUnlockedAt: Date | null;
+  parentUnlockedUntil: Date | null;
   tokenHash: string;
   expiresAt: Date;
   adminUser: { id: string; email: string };
@@ -164,7 +164,7 @@ export function installAuthProtection(
       });
     }
     request.parentSession = session;
-    if (!config.authBypass && (!session.parentUnlockedAt || session.parentUnlockedAt.getTime() <= Date.now())) {
+    if (!config.authBypass && (!session.parentUnlockedUntil || session.parentUnlockedUntil.getTime() <= Date.now())) {
       return reply.code(423).send({
         error: { code: "PARENT_UNLOCK_REQUIRED", message: "Parent verification is required" },
       });

@@ -76,6 +76,7 @@ afterEach(() => {
   queryClient.clear();
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -122,7 +123,7 @@ describe('WatchPage playback loop', () => {
     cleanup();
     renderWatch();
     fireEvent.click(screen.getByRole('button', { name: '全屏' }));
-    expect(screen.getByRole('status')).toHaveTextContent('当前环境不支持全屏播放');
+    expect(screen.getByText('当前环境不支持全屏播放')).toBeInTheDocument();
 
     cleanup();
     renderWatch();
@@ -442,5 +443,47 @@ describe('WatchPage playback loop', () => {
     expect(JSON.parse(String(seekCall?.[1]?.body))).toMatchObject({ positionMs: 16_000, eventType: 'SEEK' });
 
     expect(player.currentTime).toBe(16);
+  });
+
+  it('shows a failed sync honestly and retries the queued progress update', async () => {
+    const remoteSession: AuthSession = {
+      authenticated: true,
+      admin: { id: 'parent-1', email: 'parent@example.test' },
+      activeChildId: 'child-one',
+      activeChild: { id: 'child-one', name: '小星' },
+      csrfToken: 'csrf-test',
+      parentUnlocked: false,
+    };
+    const course = {
+      id: 'course-one', title: '数学小探险', subjectId: 'math', description: '', ageRange: '6-8岁',
+      cover: { style: 'sunrise', colors: ['#FFBD3F'] }, status: 'PUBLISHED', createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-02T00:00:00.000Z',
+      videos: [{ id: 'video-one', title: '第1课 认识数字', fileName: 'one.mp4', durationMs: 20_000, status: 'READY', sortOrder: 0, createdAt: '2026-09-01T00:00:00.000Z', progress: null }],
+    };
+    let progressAttempts = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), window.location.origin);
+      const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (url.pathname === '/api/child/profile') return body({ id: 'child-one', name: '小星', avatar: '⭐', grade: '一年级', status: 'ACTIVE', createdAt: '2026-09-01T00:00:00.000Z' });
+      if (url.pathname === '/api/child/courses') return body([course]);
+      if (url.pathname === '/api/children/child-one/records') return body({ childId: 'child-one', totalWatchedSeconds: 0, completedVideos: 0, videos: [], recentActivity: [] });
+      if (url.pathname === '/api/children/child-one/favorites') return body([]);
+      if (url.pathname === '/api/videos/video-one/playback') return body({ url: 'https://minio.example.test/private/video.mp4', expiresInSeconds: 7200 });
+      if (url.pathname === '/api/children/child-one/videos/video-one/progress' && init?.method === 'PUT') {
+        progressAttempts += 1;
+        if (progressAttempts === 1) throw new Error('offline');
+        return body({ progress: { childId: 'child-one', videoId: 'video-one', positionMs: 0, maxProgressPercent: 0, completed: false, updatedAt: '2026-09-20T08:00:00.000Z' }, recordedWatchedSeconds: 0 });
+      }
+      return new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'Not found' } }), { status: 404, headers: { 'content-type': 'application/json' } });
+    }));
+
+    render(<AuthProvider initialSession={remoteSession}><AppStoreProvider><MemoryRouter initialEntries={['/child/watch/video-one']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Routes><Route path="/child/watch/:videoId" element={<WatchPage />} /></Routes></MemoryRouter></AppStoreProvider></AuthProvider>);
+
+    await waitFor(() => expect(document.querySelector('video[aria-label="视频播放器"]')).toBeTruthy());
+    const player = document.querySelector('video[aria-label="视频播放器"]') as HTMLVideoElement;
+    fireEvent.play(player);
+    expect(await screen.findByRole('alert')).toHaveTextContent('未同步');
+    fireEvent.click(screen.getByRole('button', { name: '重试同步' }));
+    await waitFor(() => expect(screen.getByText(/已同步/)).toBeInTheDocument());
+    expect(progressAttempts).toBe(2);
   });
 });

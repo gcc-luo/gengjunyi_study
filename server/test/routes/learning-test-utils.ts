@@ -32,6 +32,8 @@ export function makeLearningHarness(options: {
   progress?: Array<any>;
   events?: Array<any>;
   favorites?: Array<any>;
+  freeChoice?: boolean;
+  assignedCourseIds?: string[];
 } = {}) {
   const state = {
     activeChildId: options.activeChildId === undefined ? "child-1" : options.activeChildId,
@@ -41,6 +43,8 @@ export function makeLearningHarness(options: {
     progress: [...(options.progress ?? [])],
     events: (options.events ?? []).map((event) => ({ eventType: "PROGRESS", positionMs: null, watchedSeconds: 0, occurredAt: new Date(), ...event })),
     favorites: [...(options.favorites ?? [])],
+    freeChoice: options.freeChoice ?? true,
+    assignedCourseIds: [...(options.assignedCourseIds ?? [])],
   };
   const adminUser = { id: "admin-1", email: "parent@example.com" };
   const session = {
@@ -48,7 +52,7 @@ export function makeLearningHarness(options: {
     adminUserId: adminUser.id,
     tokenHash: sessionTokenHash,
     activeChildId: state.activeChildId,
-    parentUnlockedAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    parentUnlockedUntil: new Date(Date.now() + 24 * 60 * 60 * 1000),
     expiresAt: new Date(Date.now() + 60_000),
   };
   const matches = (actual: any, where: any = {}) => Object.entries(where).every(([key, expected]) => {
@@ -72,6 +76,14 @@ export function makeLearningHarness(options: {
   });
   const client: any = {
     adminUser: { findUnique: vi.fn(async () => adminUser) },
+    parentSetting: {
+      findUnique: vi.fn(async ({ where }: any) => {
+        const key = where.adminUserId_key?.key;
+        if (key === "freeChoice") return state.freeChoice ? null : { value: "false" };
+        if (key === `childCourses:${state.activeChildId}`) return { value: JSON.stringify(state.assignedCourseIds) };
+        return null;
+      }),
+    },
     session: {
       findUnique: vi.fn(async () => ({
         ...session,

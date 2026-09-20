@@ -301,6 +301,16 @@ async function assignedCourseIds(prisma: PrismaClient, childId: string, adminUse
   } catch { return []; }
 }
 
+export async function canChildAccessCourse(
+  prisma: PrismaClient,
+  childId: string,
+  courseId: string,
+  adminUserId: string,
+): Promise<boolean> {
+  const assignedIds = await assignedCourseIds(prisma, childId, adminUserId);
+  return assignedIds === null || assignedIds.includes(courseId);
+}
+
 export async function listChildCourses(prisma: PrismaClient, childId: string, adminUserId?: string) {
   const assignedIds = await assignedCourseIds(prisma, childId, adminUserId);
   const courses = await prisma.course.findMany({
