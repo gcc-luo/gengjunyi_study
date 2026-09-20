@@ -366,7 +366,7 @@ describe('WatchPage playback loop', () => {
     expect(screen.getByText('先选择一个孩子')).toBeInTheDocument();
   });
 
-  it('loads a private playback URL and renders a real video element in remote mode', async () => {
+  it('keeps the private playback URL stable and resumes after a seek-triggered pause', async () => {
     const remoteSession: AuthSession = {
       authenticated: true,
       admin: { id: 'parent-1', email: 'parent@example.test' },
@@ -427,16 +427,13 @@ describe('WatchPage playback loop', () => {
     fireEvent.play(player);
     Object.defineProperty(player, 'currentTime', { configurable: true, writable: true, value: 16 });
     fireEvent.seeking(player);
-    fireEvent.seeked(player);
-    Object.defineProperty(player, 'currentTime', { configurable: true, writable: true, value: 0 });
-    fireEvent.error(player);
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('00:16'));
-    await waitFor(() => expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-3.mp4'));
-    fireEvent.loadedMetadata(player);
-    expect(player.currentTime).toBe(16);
-    expect(playSpy).toHaveBeenCalledTimes(2);
     fireEvent.pause(player);
+    fireEvent.seeked(player);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT')).toBe(true));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-2.mp4');
+    expect(playbackUrlCount).toBe(2);
+    expect(playSpy).toHaveBeenCalledTimes(2);
     const progressCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT');
     expect(JSON.parse(String(progressCall?.[1]?.body))).toMatchObject({ positionMs: 16_000, eventType: 'PROGRESS' });
 

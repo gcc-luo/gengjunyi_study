@@ -116,9 +116,13 @@ export function WatchPage() {
     dirtyRef.current = true;
   };
 
-  const handleMediaSeeked = () => {
+  const handleMediaSeeked = (media: HTMLVideoElement) => {
+    const shouldResume = seekWasPlayingRef.current === true && !media.ended;
     pendingSeekPositionRef.current = null;
     seekWasPlayingRef.current = null;
+    if (shouldResume && media.paused) {
+      void media.play().catch(() => setFullscreenMessage(`已定位到 ${formatTime(positionRef.current)}，请点击视频继续播放。`));
+    }
   };
 
   const handleMediaPause = () => {
@@ -425,7 +429,7 @@ export function WatchPage() {
             setFullscreenMessage('');
             if (renewedPlayback.wasPlaying) void media.play().catch(() => setFullscreenMessage('已恢复播放位置，请点击视频继续播放。'));
           }
-        }} onSeeking={(event) => handleMediaSeeking(event.currentTarget)} onSeeked={handleMediaSeeked} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={() => { isPlayingRef.current = true; setIsPlaying(true); }} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
+        }} onSeeking={(event) => handleMediaSeeking(event.currentTarget)} onSeeked={(event) => handleMediaSeeked(event.currentTarget)} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={() => { isPlayingRef.current = true; setIsPlaying(true); }} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
         {mediaFailed && <button className="watch-media-retry" type="button" onClick={() => renewPlaybackUrl(true)}>重新连接视频</button>}
         <button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>
         {fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}

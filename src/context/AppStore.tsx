@@ -303,6 +303,12 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
       client.invalidateQueries({ queryKey: ['child'] }),
     ]);
   };
+  const invalidateProgress = async () => {
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ['parent', 'overview'] }),
+      client.invalidateQueries({ queryKey: ['parent', 'records'] }),
+    ]);
+  };
   const currentChild = children.find((child) => child.id === activeChildId);
   const setCurrentChild = async (id: string | null) => {
     if (id) await auth?.setActiveChild(id);
@@ -377,7 +383,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
       `/api/children/${encodeURIComponent(activeChildId)}/videos/${encodeURIComponent(input.videoId)}/progress`,
       { method: 'PUT', body: JSON.stringify({ positionMs: Math.round(input.lastPositionSeconds * 1000), isPlaying: input.isPlaying, watchedSeconds: input.deltaWatchSeconds, eventType: input.isPlaying ? 'PROGRESS' : 'PAUSE' }) },
     );
-    await invalidate();
+    await invalidateProgress();
     return {
       childId: response.progress.childId,
       videoId: response.progress.videoId,

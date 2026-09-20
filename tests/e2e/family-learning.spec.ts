@@ -236,6 +236,8 @@ test('family can enter directly, manage and learn with child-isolated progress',
   const player = page.locator('video[aria-label="视频播放器"]');
   await expect(player).toHaveAttribute('src', /minio\.test\/media\/video-e2e\.mp4/);
   await expect(page.getByRole('heading', { name: 'demo-lesson' })).toBeVisible();
+  const playbackRequestsBeforeProgress = family.requests.filter((request) => request.path === '/api/videos/video-e2e/playback' && request.method === 'POST').length;
+  const overviewRequestsBeforeProgress = family.requests.filter((request) => request.path === '/api/overview' && request.method === 'GET').length;
   await player.evaluate((element) => {
     Object.defineProperty(element, 'currentTime', { configurable: true, value: 1 });
     element.dispatchEvent(new Event('play'));
@@ -243,6 +245,8 @@ test('family can enter directly, manage and learn with child-isolated progress',
     element.dispatchEvent(new Event('pause'));
   });
   await expect.poll(() => family.requests.filter((request) => request.path === '/api/children/child-brother/videos/video-e2e/progress' && request.method === 'PUT').length).toBeGreaterThan(0);
+  await expect.poll(() => family.requests.filter((request) => request.path === '/api/overview' && request.method === 'GET').length).toBeGreaterThan(overviewRequestsBeforeProgress);
+  expect(family.requests.filter((request) => request.path === '/api/videos/video-e2e/playback' && request.method === 'POST')).toHaveLength(playbackRequestsBeforeProgress);
   expect(family.progress.get('child-brother:video-e2e')).toMatchObject({ positionMs: 1000, completed: false });
 
   await page.goto('/child/select');
