@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { MediaStorage, UploadedPart } from "../storage/minio.js";
 import type { MediaValidationResult } from "./media-validation.js";
+import { mediaContentType, mediaExtension, titleFromMediaFileName } from "./media-formats.js";
 
 export const MEDIA_QUOTA_BYTES = 100_000_000_000n;
 export const UPLOAD_PART_SIZE_BYTES = 16 * 1024 * 1024;
@@ -23,6 +24,8 @@ export type UploadErrorCode =
   | "confirmation-required"
   | "video-not-archived"
   | "archived-object-missing"
+  | "source-unavailable"
+  | "video-not-failed"
   | "upload-not-active";
 
 export class UploadError extends Error {
@@ -38,10 +41,6 @@ function partCountFor(byteSize: bigint): number {
 
 function normalizeFileName(fileName: string): string {
   return fileName.replace(/[\\/]/g, "_").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 255);
-}
-
-function titleFromFileName(fileName: string): string {
-  return fileName.replace(/\.mp4$/i, "").trim().slice(0, 200) || "Untitled video";
 }
 
 function videoIdFor(session: { videoId: string | null }): string {
@@ -65,9 +64,11 @@ export async function createUpload(
   input: { courseId: string; fileName: string; sizeBytes: number },
 ) {
   const fileName = normalizeFileName(input.fileName);
-  if (!fileName.toLowerCase().endsWith(".mp4") || !fileName ||
+  const extension = mediaExtension(fileName);
+  const contentType = mediaContentType(fileName);
+  if (!extension || !contentType || !fileName ||
     !Number.isSafeInteger(input.sizeBytes) || input.sizeBytes <= 0) {
-    throw new UploadError("invalid-file", "Choose a non-empty MP4 file with a valid size");
+    throw new UploadError("invalid-file", "Choose a non-empty supported video file with a valid size");
   }
   const reservedBytes = BigInt(input.sizeBytes);
   const partCount = partCountFor(reservedBytes);
@@ -81,7 +82,9 @@ export async function createUpload(
     throw new UploadError("course-must-be-unpublished", "Unpublish the course before adding videos");
   }
 
-  const objectKey = `videos/${randomUUID()}.mp4`;
+  const mediaId = randomUUID();
+  const objectKey = `sources/${mediaId}.${extension}`;
+  const playbackObjectKey = `videos/${mediaId}.mp4`;
   let minioUploadId: string | undefined;
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -100,7 +103,7 @@ export async function createUpload(
         data: { reservedBytes: { increment: reservedBytes } },
       });
 
-      minioUploadId = await storage.createMultipartUpload(objectKey, "video/mp4");
+      minioUploadId = await storage.createMultipartUpload(objectKey, contentType);
       const courseVideos = await tx.video.findMany({
         where: { courseId: input.courseId },
         select: { sortOrder: true },
@@ -109,8 +112,8 @@ export async function createUpload(
       const video = await tx.video.create({
         data: {
           courseId: input.courseId,
-          title: titleFromFileName(fileName),
-          objectKey,
+          title: titleFromMediaFileName(fileName),
+          objectKey: playbackObjectKey,
           fileName,
           byteSize: 0n,
           status: "UPLOADING",
@@ -156,6 +159,9 @@ export async function getUploadStatus(prisma: PrismaClient, storage: MediaStorag
   const parts = session.status === "ACTIVE"
     ? await storage.listParts(session.objectKey, session.minioUploadId)
     : (session.completedParts as UploadedPart[]);
+  const video = session.videoId
+    ? await prisma.video.findUnique({ where: { id: session.videoId } })
+    : null;
   return {
     uploadId: session.id,
     status: session.status,
@@ -163,6 +169,11 @@ export async function getUploadStatus(prisma: PrismaClient, storage: MediaStorag
     partSizeBytes: UPLOAD_PART_SIZE_BYTES,
     partCount: expectedPartCount,
     parts,
+    videoId: video?.id ?? null,
+    mediaStatus: video?.status ?? null,
+    processingStage: video?.processingStage ?? null,
+    processingProgress: video?.processingProgress ?? 0,
+    failureReason: video?.failureReason ?? null,
   };
 }
 
@@ -219,7 +230,7 @@ async function releaseFailedCompletion(
 export async function completeUpload(
   prisma: PrismaClient,
   storage: MediaStorage,
-  validateMedia: (url: string) => Promise<MediaValidationResult>,
+  _validateMedia: (url: string) => Promise<MediaValidationResult>,
   uploadId: string,
 ) {
   const session = await findActiveUpload(prisma, uploadId);
@@ -230,7 +241,10 @@ export async function completeUpload(
   }
   await storage.completeMultipartUpload(session.objectKey, session.minioUploadId, parts);
   const head = await storage.headObject(session.objectKey);
-  if (head.byteSize <= 0n || head.byteSize > BigInt(session.reservedBytes) || head.contentType !== "video/mp4") {
+  const videoBeforeCompletion = await prisma.video.findUnique({ where: { id: videoIdFor(session) } });
+  const expectedContentType = videoBeforeCompletion ? mediaContentType(videoBeforeCompletion.fileName) : null;
+  if (head.byteSize <= 0n || head.byteSize > BigInt(session.reservedBytes) ||
+    !expectedContentType || head.contentType !== expectedContentType) {
     const reason = "Uploaded object size or media type does not match the reserved upload";
     await releaseFailedCompletion(prisma, storage, session, reason, true);
     throw new UploadError("object-size-mismatch", reason);
@@ -253,57 +267,19 @@ export async function completeUpload(
     });
     await tx.video.update({
       where: { id: videoIdFor(current) },
-      data: { byteSize: head.byteSize, status: "PROCESSING", failureReason: null },
+      data: {
+        byteSize: 0n,
+        sourceByteSize: head.byteSize,
+        status: "PROCESSING",
+        processingStage: "QUEUED",
+        processingProgress: 0,
+        sourceDeleteAfter: null,
+        sourceDeletedAt: null,
+        failureReason: null,
+      },
     });
   });
-
-  let validation: MediaValidationResult;
-  try {
-    validation = await validateMedia(await storage.presignInternalGetObject(session.objectKey));
-  } catch {
-    validation = { valid: false, reason: "The uploaded media could not be validated" };
-  }
-  if (!validation.valid) {
-    await prisma.video.update({
-      where: { id: videoIdFor(session) },
-      data: { status: "FAILED", failureReason: validation.reason },
-    });
-    let objectDeleted = false;
-    try {
-      await storage.deleteObject(session.objectKey);
-      objectDeleted = true;
-    } catch {
-      // Keep failed media charged against quota until storage confirms deletion.
-    }
-    if (objectDeleted) {
-      await prisma.$transaction(async (tx) => {
-        await lockQuotaRow(tx);
-        await tx.storageQuota.update({
-          where: { id: 1 },
-          data: { usedBytes: { decrement: head.byteSize } },
-        });
-        await tx.video.update({
-          where: { id: videoIdFor(session) },
-          data: { status: "FAILED", failureReason: validation.reason, byteSize: 0n },
-        });
-      });
-    }
-    return { status: "FAILED" as const, reason: validation.reason };
-  }
-
-  const video = await prisma.video.update({
-    where: { id: videoIdFor(session) },
-    data: {
-      status: "READY",
-      durationMs: validation.durationMs,
-      codec: `${validation.videoCodec}/${validation.audioCodec}`,
-      failureReason: null,
-    },
-  });
-  return {
-    status: "READY" as const,
-    video: { ...video, byteSize: BigInt(video.byteSize).toString() },
-  };
+  return { status: "PROCESSING" as const, video: { id: videoIdFor(session) } };
 }
 
 export async function cancelUpload(prisma: PrismaClient, storage: MediaStorage, uploadId: string) {
@@ -406,6 +382,39 @@ export async function restoreVideo(
   });
 }
 
+export async function retryVideoProcessing(
+  prisma: PrismaClient,
+  storage: MediaStorage,
+  videoId: string,
+) {
+  const video = await prisma.video.findUnique({ where: { id: videoId } });
+  if (!video) throw new UploadError("video-not-found", "Video not found");
+  if (video.status !== "FAILED") {
+    throw new UploadError("video-not-failed", "Only failed video processing can be retried");
+  }
+  if (BigInt(video.sourceByteSize) <= 0n || video.sourceDeletedAt) {
+    throw new UploadError("source-unavailable", "The original video is no longer available; upload it again");
+  }
+  const upload = await prisma.uploadSession.findUnique({ where: { videoId } });
+  if (!upload) throw new UploadError("source-unavailable", "The original video is no longer available; upload it again");
+  try {
+    const source = await storage.headObject(upload.objectKey);
+    if (source.byteSize <= 0n) throw new Error("empty source");
+  } catch {
+    throw new UploadError("source-unavailable", "The original video is no longer available; upload it again");
+  }
+  return prisma.video.update({
+    where: { id: video.id },
+    data: {
+      status: "PROCESSING",
+      processingStage: "QUEUED",
+      processingProgress: 0,
+      sourceDeleteAfter: null,
+      failureReason: null,
+    },
+  });
+}
+
 export async function expireOldUploads(
   prisma: PrismaClient,
   storage: MediaStorage,
@@ -456,7 +465,12 @@ export async function expireOldUploads(
           data: {
             status: "FAILED",
             failureReason: completedHead ? "Upload completed after its session expired" : "Upload expired",
-            ...(completedHead ? { byteSize: completedHead.byteSize } : {}),
+            processingStage: "FAILED",
+            ...(completedHead ? {
+              byteSize: 0n,
+              sourceByteSize: completedHead.byteSize,
+              sourceDeleteAfter: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+            } : {}),
           },
         });
       });

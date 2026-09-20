@@ -102,6 +102,28 @@ services:
       - no-new-privileges:true
     stop_grace_period: 30s
 
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: api-runtime
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+    command: ["node", "server/dist/worker.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    volumes:
+      - transcode_temp:/tmp
+    networks:
+      - database
+      - storage
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
   migrate:
     build:
       context: ..
@@ -204,6 +226,7 @@ volumes:
   postgres_data:
   minio_data:
   minio_bucket_state:
+  transcode_temp:
 
 networks:
   public:

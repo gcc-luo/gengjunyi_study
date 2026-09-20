@@ -75,6 +75,27 @@ services:
       - no-new-privileges:true
     stop_grace_period: 30s
 
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: api-runtime
+      args:
+        DOCKERHUB_PREFIX: ${DOCKERHUB_PREFIX:-m.daocloud.io/docker.io}
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+    command: ["node", "server/dist/worker.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    volumes:
+      - transcode_temp:/tmp
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
   migrate:
     build:
       context: ..
@@ -167,3 +188,5 @@ volumes:
     name: family-learning-lan-minio-data
   minio_bucket_state:
     name: family-learning-lan-minio-bucket-state
+  transcode_temp:
+    name: family-learning-lan-transcode-temp

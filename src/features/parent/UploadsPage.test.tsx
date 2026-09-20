@@ -67,13 +67,13 @@ describe('real MinIO upload page', () => {
     fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-english' } });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const valid = new File(['mp4-data'], '第3课.mp4', { type: 'video/mp4' });
-    const invalid = new File(['notes'], '说明.mov', { type: 'video/quicktime' });
+    const invalid = new File(['notes'], '说明.txt', { type: 'text/plain' });
     fireEvent.change(input, { target: { files: [valid, invalid] } });
 
     const row = (await screen.findByText('第3课.mp4')).closest('.upload-task') as HTMLElement;
     await waitFor(() => expect(within(row).getByText('已完成')).toBeInTheDocument());
     expect(within(row).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
-    expect(screen.getByText(/说明\.mov.*仅支持非空 MP4/)).toBeInTheDocument();
+    expect(screen.getByText(/说明\.txt.*仅支持常见视频格式/)).toBeInTheDocument();
     expect(requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '/api/courses/course-english/uploads', method: 'POST', body: { fileName: '第3课.mp4', sizeBytes: valid.size } }),
       expect.objectContaining({ path: `/api/uploads/${uploadId}/parts/1/url`, method: 'POST' }),
@@ -82,6 +82,25 @@ describe('real MinIO upload page', () => {
     const stored = JSON.parse(window.localStorage.getItem(uploadKey) ?? '[]');
     expect(stored[0]).toMatchObject({ uploadId, status: 'COMPLETED', videoId: 'video-uploaded-1' });
     expect(JSON.stringify(stored)).not.toContain('signed-part');
+  });
+
+  it('allows common source formats to be selected for background transcoding', async () => {
+    const requests = installUploadApi();
+    renderUploads();
+    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-english' } });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    expect(input.accept).toContain('.mov');
+    expect(input.accept).toContain('.mkv');
+    fireEvent.change(input, { target: { files: [new File(['mov-data'], '课堂录像.mov', { type: 'video/quicktime' })] } });
+
+    await waitFor(() => expect(requests).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: '/api/courses/course-english/uploads',
+        method: 'POST',
+        body: { fileName: '课堂录像.mov', sizeBytes: 8 },
+      }),
+    ])));
   });
 
   it('reselects the source file and resumes from MinIO-confirmed parts after refresh', async () => {

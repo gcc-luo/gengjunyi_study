@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { MediaStorage } from "../storage/minio.js";
-import { deleteVideo, restoreVideo, UploadError } from "../services/uploads.js";
+import { deleteVideo, restoreVideo, retryVideoProcessing, UploadError } from "../services/uploads.js";
 
 const paramsSchema = z.object({ videoId: z.string().min(1).max(128) });
 const deleteSchema = z.object({ confirmHistoryDeletion: z.literal(true).optional() }).optional().default({});
@@ -60,6 +60,28 @@ export function registerVideoManagementRoutes(
     } catch (error) {
       if (!(error instanceof UploadError)) throw error;
       const status = error.code === "video-not-found" ? 404 : error.code === "video-not-archived" ? 409 : 422;
+      return reply.code(status).send({
+        error: { code: error.code.replaceAll("-", "_").toUpperCase(), message: error.message },
+      });
+    }
+  });
+
+  app.post("/api/videos/:videoId/retry-processing", { preHandler: app.requireParent }, async (request, reply: FastifyReply) => {
+    const params = paramsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Video ID is invalid" } });
+    }
+    try {
+      const video = await retryVideoProcessing(prisma, storage, params.data.videoId);
+      return reply.send({
+        videoId: video.id,
+        status: video.status,
+        processingStage: video.processingStage,
+        processingProgress: video.processingProgress,
+      });
+    } catch (error) {
+      if (!(error instanceof UploadError)) throw error;
+      const status = error.code === "video-not-found" ? 404 : error.code === "source-unavailable" ? 410 : 409;
       return reply.code(status).send({
         error: { code: error.code.replaceAll("-", "_").toUpperCase(), message: error.message },
       });

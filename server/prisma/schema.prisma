@@ -122,6 +122,11 @@ model Video {
   durationMs    Int?
   codec         String?
   failureReason String?
+  processingStage String?
+  processingProgress Int      @default(0)
+  sourceByteSize BigInt       @default(0)
+  sourceDeleteAfter DateTime? @db.Timestamptz(3)
+  sourceDeletedAt DateTime?   @db.Timestamptz(3)
   status        MediaStatus     @default(UPLOADING)
   sortOrder     Int             @default(0)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
@@ -134,6 +139,7 @@ model Video {
 
   @@index([courseId, sortOrder])
   @@index([status, createdAt])
+  @@index([status, processingStage, createdAt])
 }
 
 model UploadSession {

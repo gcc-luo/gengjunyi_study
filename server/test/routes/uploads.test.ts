@@ -126,7 +126,7 @@ describe("resumable uploads", () => {
   });
 
   it.each([
-    ["wrong extension", "lesson.mov", 100],
+    ["wrong extension", "lesson.txt", 100],
     ["zero size", "lesson.mp4", 0],
     ["negative size", "lesson.mp4", -1],
   ])("rejects %s before reserving quota", async (_reason, fileName, sizeBytes) => {
@@ -143,6 +143,33 @@ describe("resumable uploads", () => {
     expect(response.statusCode).toBe(400);
     expect(harness.state.quota.reservedBytes).toBe(0n);
     expect(harness.storage.createMultipartUpload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["lesson.mp4", "video/mp4"],
+    ["lesson.mov", "video/quicktime"],
+    ["lesson.m4v", "video/x-m4v"],
+    ["lesson.mkv", "video/x-matroska"],
+    ["lesson.webm", "video/webm"],
+    ["lesson.avi", "video/x-msvideo"],
+    ["lesson.m2ts", "video/mp2t"],
+    ["lesson.3gp", "video/3gpp"],
+  ])("accepts %s as a transcode source", async (fileName, contentType) => {
+    const harness = uploadHarness();
+    openApps.push(harness.app);
+
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/courses/course-1/uploads",
+      headers: parentHeaders,
+      payload: { fileName, sizeBytes: 100 },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(harness.storage.createMultipartUpload).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`\\.${fileName.split(".").pop()}$`, "i")),
+      contentType,
+    );
   });
 
   it("reserves quota atomically and signs a part against the browser-facing MinIO URL", async () => {
@@ -211,7 +238,7 @@ describe("resumable uploads", () => {
     expect(harness.validateMedia).not.toHaveBeenCalled();
   });
 
-  it("completes a valid upload, settles the reservation and marks the video READY", async () => {
+  it("completes an upload, settles the reservation and queues background transcoding", async () => {
     const harness = uploadHarness();
     openApps.push(harness.app);
     const created = await harness.app.inject({
@@ -230,11 +257,17 @@ describe("resumable uploads", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().status).toBe("READY");
+    expect(response.json().status).toBe("PROCESSING");
     expect(harness.state.quota.usedBytes).toBe(100n);
     expect(harness.state.quota.reservedBytes).toBe(0n);
-    expect(harness.state.video.status).toBe("READY");
-    expect(harness.storage.presignInternalGetObject).toHaveBeenCalledOnce();
+    expect(harness.state.video).toMatchObject({
+      status: "PROCESSING",
+      processingStage: "QUEUED",
+      processingProgress: 0,
+      sourceByteSize: 100n,
+    });
+    expect(harness.storage.presignInternalGetObject).not.toHaveBeenCalled();
+    expect(harness.validateMedia).not.toHaveBeenCalled();
   });
 
   it("releases reserved bytes when an upload is cancelled", async () => {
@@ -279,7 +312,7 @@ describe("resumable uploads", () => {
     expect(harness.state.upload.status).toBe("EXPIRED");
   });
 
-  it("removes invalid media without leaving a stale quota charge", async () => {
+  it("reports the current transcoding stage and progress for a completed upload", async () => {
     const harness = uploadHarness();
     openApps.push(harness.app);
     await harness.app.inject({
@@ -288,20 +321,71 @@ describe("resumable uploads", () => {
       headers: parentHeaders,
       payload: { fileName: "lesson.mp4", sizeBytes: 100 },
     });
-    harness.validateMedia.mockResolvedValue({ valid: false, reason: "The video must use H.264 encoding" });
-
-    const response = await harness.app.inject({
+    await harness.app.inject({
       method: "POST",
       url: "/api/uploads/upload-1/complete",
       headers: parentHeaders,
       payload: {},
     });
+    Object.assign(harness.state.video, { processingStage: "TRANSCODING", processingProgress: 43 });
 
-    expect(response.statusCode).toBe(422);
-    expect(harness.storage.deleteObject).toHaveBeenCalledOnce();
-    expect(harness.state.quota.usedBytes).toBe(0n);
-    expect(harness.state.video.byteSize).toBe(0n);
-    expect(harness.state.video.status).toBe("FAILED");
+    const response = await harness.app.inject({
+      method: "GET",
+      url: "/api/uploads/upload-1",
+      headers: parentHeaders,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      videoId: "video-1",
+      mediaStatus: "PROCESSING",
+      processingStage: "TRANSCODING",
+      processingProgress: 43,
+    });
+  });
+
+  it("requeues failed transcoding while the retained source still exists", async () => {
+    const harness = uploadHarness();
+    openApps.push(harness.app);
+    await harness.app.inject({
+      method: "POST",
+      url: "/api/courses/course-1/uploads",
+      headers: parentHeaders,
+      payload: { fileName: "lesson.mov", sizeBytes: 100 },
+    });
+    harness.storage.headObject.mockResolvedValue({ byteSize: 100n, contentType: "video/quicktime" });
+    await harness.app.inject({
+      method: "POST",
+      url: "/api/uploads/upload-1/complete",
+      headers: parentHeaders,
+      payload: {},
+    });
+    Object.assign(harness.state.video, {
+      status: "FAILED",
+      processingStage: "FAILED",
+      failureReason: "temporary ffmpeg failure",
+      sourceDeleteAfter: new Date(Date.now() + 60_000),
+    });
+
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/videos/video-1/retry-processing",
+      headers: parentHeaders,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      videoId: "video-1",
+      status: "PROCESSING",
+      processingStage: "QUEUED",
+      processingProgress: 0,
+    });
+    expect(harness.state.video).toMatchObject({
+      status: "PROCESSING",
+      processingStage: "QUEUED",
+      sourceDeleteAfter: null,
+      failureReason: null,
+    });
   });
 
   it("does not issue a new URL for a part already present in MinIO", async () => {

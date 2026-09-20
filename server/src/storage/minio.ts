@@ -8,11 +8,14 @@ import {
   HeadBucketCommand,
   HeadObjectCommand,
   ListPartsCommand,
+  PutObjectCommand,
   S3Client,
   UploadPartCommand,
   type CompletedPart,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 
 export type MinioStorageConfig = {
   endpoint: string;
@@ -36,6 +39,7 @@ export interface MediaStorage {
   headObject(key: string): Promise<ObjectHead>;
   presignGetObject(key: string): Promise<string>;
   presignInternalGetObject(key: string): Promise<string>;
+  putObjectFromFile(key: string, filePath: string, contentType: string): Promise<void>;
   deleteObject(key: string): Promise<void>;
   ensureBucket(): Promise<void>;
   close(): void;
@@ -148,6 +152,17 @@ export class MinioStorage implements MediaStorage {
       Bucket: this.config.bucket,
       Key: key,
     }), { expiresIn: 15 * 60 });
+  }
+
+  async putObjectFromFile(key: string, filePath: string, contentType: string): Promise<void> {
+    const file = await stat(filePath);
+    await this.internalClient.send(new PutObjectCommand({
+      Bucket: this.config.bucket,
+      Key: key,
+      Body: createReadStream(filePath),
+      ContentLength: file.size,
+      ContentType: contentType,
+    }));
   }
 
   async deleteObject(key: string): Promise<void> {

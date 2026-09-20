@@ -35,6 +35,8 @@ function sendUploadError(reply: FastifyReply, error: unknown) {
     "video-not-found": 404,
     "video-not-archived": 409,
     "archived-object-missing": 422,
+    "source-unavailable": 410,
+    "video-not-failed": 409,
     "course-is-published": 409,
     "confirmation-required": 400,
     "upload-not-active": 409,
@@ -89,9 +91,6 @@ export function registerUploadRoutes(
     if (!params.success) return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Upload ID is invalid" } });
     try {
       const result = await completeUpload(prisma, storage, validateMedia, params.data.uploadId);
-      if (result.status === "FAILED") {
-        return reply.code(422).send({ status: result.status, error: { code: "MEDIA_VALIDATION_FAILED", message: result.reason } });
-      }
       return reply.send({ status: result.status, video: result.video });
     } catch (error) {
       return sendUploadError(reply, error);
