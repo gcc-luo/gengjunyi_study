@@ -192,12 +192,16 @@ describe('child learning pages', () => {
     renderRoute('/child/select', childSnapshot());
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
 
-    const cards = screen.getAllByRole('link', { name: /去探索/ });
-    expect(cards[0]).toHaveStyle({ backgroundImage: expect.stringContaining('english-background.jpg') });
-    expect(cards[0].getAttribute('style')).toContain('#FF6C6685');
-    expect(cards[1]).toHaveStyle({ backgroundImage: expect.stringContaining('chinese-background.jpg') });
-    expect(cards[2]).toHaveStyle({ backgroundImage: expect.stringContaining('math-background.jpg') });
-    expect(cards[3]).toHaveStyle({ backgroundImage: expect.stringContaining('science-background.jpg') });
+    const cards = [
+      screen.getByRole('link', { name: '英语' }),
+      screen.getByRole('link', { name: '语文' }),
+      screen.getByRole('link', { name: '数学' }),
+      screen.getByRole('link', { name: '科普' }),
+    ];
+    expect(cards[0]).toHaveStyle({ backgroundImage: expect.stringContaining('english-card-poster.png') });
+    expect(cards[1]).toHaveStyle({ backgroundImage: expect.stringContaining('chinese-card-poster.png') });
+    expect(cards[2]).toHaveStyle({ backgroundImage: expect.stringContaining('math-card-poster.png') });
+    expect(cards[3]).toHaveStyle({ backgroundImage: expect.stringContaining('science-card-poster.png') });
   });
 
   it('shows the current child course progress only on home', () => {
@@ -214,7 +218,7 @@ describe('child learning pages', () => {
   it('filters courses by subject query and links READY videos to the player', () => {
     renderRoute('/child/select', childSnapshot());
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
-    fireEvent.click(screen.getByRole('link', { name: /123 数学/ }));
+    fireEvent.click(screen.getByRole('link', { name: '数学' }));
 
     expect(screen.getByText('数学小探险')).toBeInTheDocument();
     expect(screen.queryByText('语文故事会')).not.toBeInTheDocument();

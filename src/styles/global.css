@@ -170,3 +170,12 @@
 .watch-media-error p { position:static; color:#fff; font-size:13px; }
 .watch-media-error button { padding:8px 16px; border:1px solid rgba(255,255,255,.65); border-radius:8px; color:#fff; background:rgba(255,255,255,.12); cursor:pointer; }
 .watch-media-retry { position:absolute; z-index:3; bottom:16px; left:50%; padding:9px 15px; transform:translateX(-50%); border:1px solid rgba(255,255,255,.75); border-radius:9px; color:#fff; background:rgba(7,24,63,.88); cursor:pointer; }
+
+/* Subject cards are pure full-bleed illustrated poster links. */
+.subject-grid { gap:8px; }
+.subject-card { min-height:138px; padding:0; border:1px solid rgba(255,255,255,.55); box-shadow:0 8px 18px rgba(40,70,105,.14); }
+.subject-card:hover { transform:translateY(-3px) scale(1.015); box-shadow:0 12px 22px rgba(40,70,105,.2); }
+
+@media (max-width:360px) {
+  .subject-card { min-height:128px; }
+}
