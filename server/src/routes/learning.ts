@@ -199,7 +199,14 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
       const elapsed = previousEvents[0]
         ? Math.max(0, Math.floor((Date.now() - previousEvents[0].occurredAt.getTime()) / 1000))
         : 0;
-      const watchedSeconds = body.data.isPlaying ? Math.min(30, elapsed) : 0;
+      // Heartbeats are server-timed; a PAUSE may also carry the few seconds
+      // accumulated since the last heartbeat, while PLAY/SEEK/ENDED carry no
+      // billable time by themselves.
+      const watchedSeconds = body.data.eventType === "PAUSE" || body.data.eventType === "ENDED"
+        ? Math.min(30, body.data.watchedSeconds ?? 0, elapsed)
+        : body.data.isPlaying
+          ? Math.min(30, elapsed)
+          : 0;
       await tx.watchEvent.create({
         data: {
           childId: child.id,
@@ -321,16 +328,17 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
     const todayStart = localDayStart(now, timeZone);
     const tomorrowStart = localDayStart(now, timeZone, -1);
     const thisWeekStart = weekStart(now, timeZone);
-    const activeChildId = request.parentSession?.activeChildId ?? undefined;
-    const childWhere = activeChildId ? { childId: activeChildId } : {};
+    // Parent overview is family-wide. The selected child is only a playback/content scope,
+    // and must not silently hide another child's activity from the management dashboard.
+    const childWhere = {};
     const [children, courses, readyVideos, allWatchTime, todayWatchTime, todayEvents, weekWatchTime, completedRows, recentRows, progressRows] = await Promise.all([
       prisma.child.count({ where: { status: "ACTIVE" } }),
       prisma.course.count({ where: { status: "PUBLISHED" } }),
       prisma.video.count({ where: { status: "READY", course: { status: "PUBLISHED" } } }),
       prisma.watchEvent.aggregate({ where: childWhere, _sum: { watchedSeconds: true } }),
-      prisma.watchEvent.aggregate({ where: eventWhere(activeChildId, todayStart, tomorrowStart), _sum: { watchedSeconds: true } }),
-      prisma.watchEvent.count({ where: eventWhere(activeChildId, todayStart, tomorrowStart) }),
-      prisma.watchEvent.aggregate({ where: eventWhere(activeChildId, thisWeekStart), _sum: { watchedSeconds: true } }),
+      prisma.watchEvent.aggregate({ where: eventWhere(undefined, todayStart, tomorrowStart), _sum: { watchedSeconds: true } }),
+      prisma.watchEvent.count({ where: eventWhere(undefined, todayStart, tomorrowStart) }),
+      prisma.watchEvent.aggregate({ where: eventWhere(undefined, thisWeekStart), _sum: { watchedSeconds: true } }),
       prisma.watchProgress.findMany({ where: { ...childWhere, completed: true }, select: { id: true } }),
       prisma.watchEvent.findMany({ where: childWhere, orderBy: { occurredAt: "desc" }, take: 10 }),
       prisma.watchProgress.findMany({ where: { ...childWhere, completed: false }, orderBy: { updatedAt: "desc" }, take: 10 }),
@@ -356,7 +364,7 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
       const startsAt = localDayStart(now, timeZone, daysAgo);
       const endsAt = localDayStart(now, timeZone, daysAgo - 1);
       const aggregate = await prisma.watchEvent.aggregate({
-        where: eventWhere(activeChildId, startsAt, endsAt),
+        where: eventWhere(undefined, startsAt, endsAt),
         _sum: { watchedSeconds: true },
       });
       return {

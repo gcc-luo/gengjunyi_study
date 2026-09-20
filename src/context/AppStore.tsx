@@ -11,7 +11,8 @@ import type { SubjectId } from '../types/domain';
 
 type CourseInput = Partial<Pick<Course, 'description' | 'ageRange' | 'cover' | 'videoIds'>> & Pick<Course, 'title' | 'subjectId'>;
 type VideoInput = Pick<Video, 'title' | 'fileName' | 'durationSeconds'> & Partial<Pick<Video, 'status' | 'orderIndex'>>;
-type ProgressInput = Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; updatedAt?: string };
+type ProgressEventType = 'PROGRESS' | 'PLAY' | 'PAUSE' | 'SEEK' | 'ENDED';
+type ProgressInput = Pick<WatchProgress, 'childId' | 'videoId' | 'lastPositionSeconds'> & { progress: number; deltaWatchSeconds: number; isPlaying: boolean; eventType?: ProgressEventType; updatedAt?: string };
 type ChildInput = Pick<Child, 'name' | 'avatar' | 'grade'>;
 type ChildUpdate = Partial<ChildInput> & Partial<Pick<Child, 'status'>>;
 type UploadTaskInput = Pick<UploadTask, 'courseId' | 'fileName'>;
@@ -27,6 +28,8 @@ export interface AppStoreValue {
   children: Child[];
   courses: Course[];
   videos: Video[];
+  childCourses: Course[];
+  childVideos: Video[];
   progress: WatchProgress[];
   watchEvents: WatchEvent[];
   favorites: Favorite[];
@@ -43,6 +46,7 @@ export interface AppStoreValue {
   addVideo: (courseId: string, input: VideoInput) => MaybePromise<Video>;
   updateVideo: (id: string, input: Partial<VideoInput>) => MaybePromise<Video | undefined>;
   removeVideo: (id: string) => MaybePromise<void>;
+  restoreVideo: (id: string) => MaybePromise<Video | undefined>;
   createChild: (input: ChildInput) => MaybePromise<Child>;
   updateChild: (id: string, input: ChildUpdate) => MaybePromise<Child | undefined>;
   deactivateChild: (id: string) => MaybePromise<Child | undefined>;
@@ -103,7 +107,8 @@ function LocalAppStoreProvider({ children, initialSnapshot }: { children: ReactN
     const offlineCourse = (id: string) => { const course = snapshotRef.current.courses.find((item) => item.id === id); if (!course) return undefined; const next = { ...course, status: CourseStatus.OFFLINE, updatedAt: now() }; update((draft) => { const target = draft.courses.find((item) => item.id === id); if (target) Object.assign(target, next); }); return next; };
     const addVideo = (courseId: string, input: VideoInput) => { const orderIndex = Math.max(0, ...snapshotRef.current.videos.filter((video) => video.courseId === courseId).map((video) => video.orderIndex)) + 1; const video: Video = { id: newId('video'), courseId, title: input.title, fileName: input.fileName, durationSeconds: input.durationSeconds, status: input.status ?? VideoStatus.READY, orderIndex, createdAt: now() }; update((draft) => { draft.videos.push(video); const course = draft.courses.find((item) => item.id === courseId); if (course) course.videoIds.push(video.id); }); return video; };
     const updateVideo = (id: string, input: Partial<VideoInput>) => { const video = snapshotRef.current.videos.find((item) => item.id === id); if (!video) return undefined; const next = { ...video, ...input }; update((draft) => { const index = draft.videos.findIndex((item) => item.id === id); draft.videos[index] = next; }); return next; };
-    const removeVideo = (id: string) => update((draft) => { draft.videos = draft.videos.filter((video) => video.id !== id); draft.courses.forEach((course) => { course.videoIds = course.videoIds.filter((videoId) => videoId !== id); }); });
+    const removeVideo = (id: string) => update((draft) => { const video = draft.videos.find((item) => item.id === id); if (video) video.status = VideoStatus.ARCHIVED; });
+    const restoreVideo = (id: string) => { const video = snapshotRef.current.videos.find((item) => item.id === id); if (!video) return undefined; const restored = { ...video, status: VideoStatus.READY }; update((draft) => { const target = draft.videos.find((item) => item.id === id); if (target) target.status = VideoStatus.READY; }); return restored; };
     const createChild = (input: ChildInput) => { const child: Child = { ...input, id: newId('child'), status: ChildStatus.ACTIVE, createdAt: now() }; update((draft) => draft.children.push(child)); return child; };
     const updateChild = (id: string, input: ChildUpdate) => { const child = snapshotRef.current.children.find((item) => item.id === id); if (!child) return undefined; const next = { ...child, ...input }; update((draft) => { const index = draft.children.findIndex((item) => item.id === id); draft.children[index] = next; }); return next; };
     const deactivateChild = (id: string) => { const child = snapshotRef.current.children.find((item) => item.id === id); if (!child) return undefined; const next = { ...child, status: ChildStatus.INACTIVE }; update((draft) => { const target = draft.children.find((item) => item.id === id); if (target) target.status = ChildStatus.INACTIVE; }); if (currentChildId === id) setCurrentChildId(null); return next; };
@@ -113,11 +118,12 @@ function LocalAppStoreProvider({ children, initialSnapshot }: { children: ReactN
       const video = snapshotRef.current.videos.find((item) => item.id === input.videoId);
       if (!video) return undefined;
       const previous = snapshotRef.current.watchProgress.find((item) => item.childId === input.childId && item.videoId === input.videoId);
-      const nextProgress = createProgressUpdate(previous, { ...input, durationSeconds: video.durationSeconds });
+      const hasPendingPlayedSeconds = input.deltaWatchSeconds > 0;
+      const nextProgress = createProgressUpdate(previous, { ...input, isPlaying: input.isPlaying || hasPendingPlayedSeconds, durationSeconds: video.durationSeconds });
       update((draft) => {
         const index = draft.watchProgress.findIndex((item) => item.childId === input.childId && item.videoId === input.videoId);
         if (index === -1) draft.watchProgress.push(nextProgress); else draft.watchProgress[index] = nextProgress;
-        draft.watchEvents = addWatchEvent(draft.watchEvents, { childId: input.childId, videoId: input.videoId, isPlaying: input.isPlaying, deltaWatchSeconds: input.deltaWatchSeconds, positionSeconds: input.lastPositionSeconds, occurredAt: input.updatedAt });
+        draft.watchEvents = addWatchEvent(draft.watchEvents, { childId: input.childId, videoId: input.videoId, isPlaying: input.isPlaying || hasPendingPlayedSeconds, deltaWatchSeconds: input.deltaWatchSeconds, positionSeconds: input.lastPositionSeconds, occurredAt: input.updatedAt });
       });
       return nextProgress;
     };
@@ -150,7 +156,7 @@ function LocalAppStoreProvider({ children, initialSnapshot }: { children: ReactN
       return video;
     };
     const resetSnapshotCommand = (next?: Snapshot) => { const replacement = next ?? resetStorage(); commit(replacement); setCurrentChildId(replacement.children.find((child) => child.status === ChildStatus.ACTIVE)?.id ?? null); };
-    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, isLoading: false, isRemote: false, error: null, retry: async () => undefined, overview: null, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, createUploadTask, updateUploadTask, completeUploadTask, resetSnapshot: resetSnapshotCommand };
+    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, childCourses: snapshot.courses, childVideos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, isLoading: false, isRemote: false, error: null, retry: async () => undefined, overview: null, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, restoreVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, createUploadTask, updateUploadTask, completeUploadTask, resetSnapshot: resetSnapshotCommand };
   }, [snapshot, currentChildId]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
@@ -161,7 +167,7 @@ type CourseApi = {
   id: string; title: string; subjectId: string; description: string | null; ageRange: string;
   cover: { style: string; colors: string[] }; status: 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED';
   createdAt: string; updatedAt: string;
-  videos: Array<{ id: string; courseId: string; title: string; fileName: string; durationMs: number | null; status: string; sortOrder: number; createdAt: string }>;
+  videos: Array<{ id: string; courseId?: string; title: string; fileName: string; durationMs: number | null; status: string; sortOrder: number; createdAt: string }>;
 };
 type RecordApi = {
   total: number; items: Array<{
@@ -190,12 +196,16 @@ function mapCourse(course: CourseApi): Course {
 }
 
 function mapVideo(video: CourseApi['videos'][number]): Video {
+  return mapVideoWithCourse(video, video.courseId);
+}
+
+function mapVideoWithCourse(video: CourseApi['videos'][number], courseId: string | undefined): Video {
   const status = video.status === 'UPLOADING' || video.status === 'PROCESSING' || video.status === 'READY'
     ? video.status
     : video.status === 'ARCHIVED' ? 'ARCHIVED' : 'FAILED';
   return {
     id: video.id,
-    courseId: video.courseId,
+    courseId: courseId ?? '',
     title: video.title,
     fileName: video.fileName,
     durationSeconds: video.durationMs ? video.durationMs / 1000 : 0,
@@ -203,6 +213,10 @@ function mapVideo(video: CourseApi['videos'][number]): Video {
     orderIndex: video.sortOrder + 1,
     createdAt: video.createdAt,
   };
+}
+
+function mapChildCourse(course: CourseApi): Course {
+  return mapCourse(course);
 }
 
 function emptySnapshot(): Snapshot {
@@ -225,6 +239,11 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     queryFn: () => apiRequest<CourseApi[]>('/api/courses'),
     enabled: apiEnabled,
   });
+  const childCoursesQuery = useQuery({
+    queryKey: ['child', activeChildId, 'courses'],
+    queryFn: () => apiRequest<CourseApi[]>('/api/child/courses'),
+    enabled: Boolean(activeChildId) && apiEnabled,
+  });
   const overviewQuery = useQuery({
     queryKey: ['parent', 'overview'],
     queryFn: () => apiRequest<OverviewData>('/api/overview'),
@@ -243,6 +262,8 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
   const children = (childrenQuery.data ?? []).map(mapChild);
   const courses = (coursesQuery.data ?? []).map(mapCourse);
   const videos = (coursesQuery.data ?? []).flatMap((course) => course.videos.map(mapVideo));
+  const childCourses = (childCoursesQuery.data ?? []).map(mapChildCourse);
+  const childVideos = (childCoursesQuery.data ?? []).flatMap((course) => course.videos.map((video) => mapVideoWithCourse(video, course.id)));
   const watchEvents: WatchEvent[] = (recentRecordsQuery.data?.items ?? []).map((event) => ({
     id: event.id,
     childId: event.childId,
@@ -295,7 +316,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     })),
     uploadTasks,
   };
-  const loadingQueries = [childrenQuery, coursesQuery, overviewQuery, recentRecordsQuery];
+  const loadingQueries = [childrenQuery, coursesQuery, overviewQuery, recentRecordsQuery, ...(activeChildId ? [childCoursesQuery] : [])];
   const errorValue = loadingQueries.find((item) => item.error)?.error ?? favoritesQuery.error;
   const invalidate = async () => {
     await Promise.all([
@@ -355,6 +376,11 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     await invalidate();
     return mapVideo(video);
   };
+  const restoreVideo = async (id: string) => {
+    const video = await apiRequest<CourseApi['videos'][number]>(`/api/videos/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+    await invalidate();
+    return mapVideo(video);
+  };
   const createChild = async (input: ChildInput) => {
     const child = await apiRequest<ChildApi>('/api/children', { method: 'POST', body: JSON.stringify(input) });
     await invalidate();
@@ -381,7 +407,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     if (!activeChildId || input.childId !== activeChildId) throw new Error('当前孩子与进度写入孩子不一致');
     const response = await apiRequest<{ progress: { childId: string; videoId: string; positionMs: number; maxProgressPercent: number; completed: boolean; updatedAt: string } }>(
       `/api/children/${encodeURIComponent(activeChildId)}/videos/${encodeURIComponent(input.videoId)}/progress`,
-      { method: 'PUT', body: JSON.stringify({ positionMs: Math.round(input.lastPositionSeconds * 1000), isPlaying: input.isPlaying, watchedSeconds: input.deltaWatchSeconds, eventType: input.isPlaying ? 'PROGRESS' : 'PAUSE' }) },
+      { method: 'PUT', body: JSON.stringify({ positionMs: Math.round(input.lastPositionSeconds * 1000), isPlaying: input.isPlaying, watchedSeconds: input.deltaWatchSeconds, eventType: input.eventType ?? (input.isPlaying ? 'PROGRESS' : 'PAUSE') }) },
     );
     await invalidateProgress();
     return {
@@ -427,6 +453,8 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     children,
     courses,
     videos,
+    childCourses,
+    childVideos,
     progress: activeChildId ? snapshot.watchProgress.filter((item) => item.childId === activeChildId) : [],
     watchEvents: activeChildId ? snapshot.watchEvents.filter((item) => item.childId === activeChildId) : snapshot.watchEvents,
     favorites: activeChildId ? snapshot.favorites.filter((item) => item.childId === activeChildId) : [],
@@ -443,6 +471,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     addVideo: async () => { throw new Error('请通过视频上传页面添加真实视频'); },
     updateVideo,
     removeVideo: async (id) => { await apiRequest(`/api/videos/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ confirmHistoryDeletion: true }) }); await invalidate(); },
+    restoreVideo,
     createChild,
     updateChild,
     deactivateChild,
@@ -452,7 +481,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     updateUploadTask,
     completeUploadTask: async () => undefined,
     resetSnapshot: async () => { throw new Error('服务端真实家庭数据不能通过本地重置'); },
-  }), [snapshot, activeChildId, currentChild, setCurrentChild, children, courses, videos, uploadTasks, loadingQueries, errorValue, retry, overviewQuery.data, createCourse, updateCourse, publishCourse, offlineCourse, updateVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite]);
+  }), [snapshot, activeChildId, currentChild, setCurrentChild, children, courses, videos, childCourses, childVideos, uploadTasks, loadingQueries, errorValue, retry, overviewQuery.data, createCourse, updateCourse, publishCourse, offlineCourse, updateVideo, restoreVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite]);
   return <AppStoreContext.Provider value={value}>{content}</AppStoreContext.Provider>;
 }
 

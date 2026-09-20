@@ -33,6 +33,8 @@ function sendUploadError(reply: FastifyReply, error: unknown) {
     "parts-incomplete": 409,
     "object-size-mismatch": 422,
     "video-not-found": 404,
+    "video-not-archived": 409,
+    "archived-object-missing": 422,
     "course-is-published": 409,
     "confirmation-required": 400,
     "upload-not-active": 409,

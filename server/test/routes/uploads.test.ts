@@ -352,7 +352,7 @@ describe("resumable uploads", () => {
     expect(criticalResponse.json().warningLevel).toBe("critical");
   });
 
-  it("requires explicit history deletion confirmation and refuses published courses", async () => {
+  it("archives instead of removing a video from a published course", async () => {
     const harness = uploadHarness();
     openApps.push(harness.app);
     harness.state.video = {
@@ -375,7 +375,7 @@ describe("resumable uploads", () => {
     expect(harness.storage.deleteObject).not.toHaveBeenCalled();
   });
 
-  it("deletes the private object and associated learning history after confirmation", async () => {
+  it("archives the private object without deleting learning history and can restore it", async () => {
     const harness = uploadHarness({ usedBytes: 100n });
     openApps.push(harness.app);
     harness.state.video = {
@@ -394,10 +394,20 @@ describe("resumable uploads", () => {
     });
 
     expect(response.statusCode).toBe(204);
-    expect(harness.storage.deleteObject).toHaveBeenCalledWith("videos/video-1.mp4");
-    expect(harness.prisma.watchProgress.deleteMany).toHaveBeenCalledWith({ where: { videoId: "video-1" } });
-    expect(harness.prisma.watchEvent.deleteMany).toHaveBeenCalledWith({ where: { videoId: "video-1" } });
-    expect(harness.prisma.favorite.deleteMany).toHaveBeenCalledWith({ where: { videoId: "video-1" } });
-    expect(harness.state.quota.usedBytes).toBe(0n);
+    expect(harness.storage.deleteObject).not.toHaveBeenCalled();
+    expect(harness.prisma.watchProgress.deleteMany).not.toHaveBeenCalled();
+    expect(harness.prisma.watchEvent.deleteMany).not.toHaveBeenCalled();
+    expect(harness.prisma.favorite.deleteMany).not.toHaveBeenCalled();
+    expect(harness.state.quota.usedBytes).toBe(100n);
+    expect(harness.state.video.status).toBe("ARCHIVED");
+
+    const restored = await harness.app.inject({
+      method: "POST",
+      url: "/api/videos/video-1/restore",
+      headers: parentHeaders,
+    });
+
+    expect(restored.statusCode).toBe(200);
+    expect(harness.state.video.status).toBe("READY");
   });
 });

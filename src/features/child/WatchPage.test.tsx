@@ -386,7 +386,7 @@ describe('WatchPage playback loop', () => {
       const url = new URL(String(input), window.location.origin);
       const body = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
       if (url.pathname === '/api/children') return body([{ id: 'child-one', name: '小星', avatar: '⭐', grade: '一年级', status: 'ACTIVE', createdAt: '2026-09-01T00:00:00.000Z' }]);
-      if (url.pathname === '/api/courses') return body([course]);
+      if (url.pathname === '/api/courses' || url.pathname === '/api/child/courses') return body([course]);
       if (url.pathname === '/api/overview') return body(overview);
       if (url.pathname === '/api/records') return body({ total: 0, items: [] });
       if (url.pathname === '/api/children/child-one/favorites') return body([]);
@@ -434,8 +434,12 @@ describe('WatchPage playback loop', () => {
     expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-2.mp4');
     expect(playbackUrlCount).toBe(2);
     expect(playSpy).toHaveBeenCalledTimes(2);
-    const progressCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT');
-    expect(JSON.parse(String(progressCall?.[1]?.body))).toMatchObject({ positionMs: 16_000, eventType: 'PROGRESS' });
+    const playCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT' && JSON.parse(String(init.body)).eventType === 'PLAY');
+    expect(JSON.parse(String(playCall?.[1]?.body))).toMatchObject({ isPlaying: true, eventType: 'PLAY' });
+    const pauseCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT' && JSON.parse(String(init.body)).eventType === 'PAUSE');
+    expect(JSON.parse(String(pauseCall?.[1]?.body))).toMatchObject({ positionMs: 16_000, isPlaying: false, eventType: 'PAUSE' });
+    const seekCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT' && JSON.parse(String(init.body)).eventType === 'SEEK');
+    expect(JSON.parse(String(seekCall?.[1]?.body))).toMatchObject({ positionMs: 16_000, eventType: 'SEEK' });
 
     expect(player.currentTime).toBe(16);
   });

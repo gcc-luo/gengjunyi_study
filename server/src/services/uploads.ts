@@ -21,6 +21,8 @@ export type UploadErrorCode =
   | "video-not-found"
   | "course-is-published"
   | "confirmation-required"
+  | "video-not-archived"
+  | "archived-object-missing"
   | "upload-not-active";
 
 export class UploadError extends Error {
@@ -349,13 +351,11 @@ export async function getStorageQuota(prisma: PrismaClient) {
 export async function deleteVideo(
   prisma: PrismaClient,
   storage: MediaStorage,
-  input: { videoId: string; confirmHistoryDeletion: boolean },
+  input: { videoId: string },
 ) {
-  if (!input.confirmHistoryDeletion) {
-    throw new UploadError("confirmation-required", "Confirm that this will also delete learning history");
-  }
   const video = await prisma.video.findUnique({ where: { id: input.videoId } });
   if (!video) throw new UploadError("video-not-found", "Video not found");
+  if (video.status === "ARCHIVED") return;
   const course = await prisma.course.findUnique({ where: { id: video.courseId } });
   if (course?.status === "PUBLISHED") {
     throw new UploadError("course-is-published", "Unpublish the course before deleting its videos");
@@ -365,8 +365,6 @@ export async function deleteVideo(
   const upload = await prisma.uploadSession.findUnique({ where: { videoId: video.id } });
   if (upload?.status === "ACTIVE") {
     await storage.abortMultipartUpload(upload.objectKey, upload.minioUploadId);
-  } else if (BigInt(video.byteSize) > 0n) {
-    await storage.deleteObject(video.objectKey);
   }
 
   await prisma.$transaction(async (tx) => {
@@ -377,16 +375,34 @@ export async function deleteVideo(
         data: { reservedBytes: { decrement: BigInt(upload.reservedBytes) } },
       });
       await tx.uploadSession.update({ where: { id: upload.id }, data: { status: "ABORTED", reservedBytes: 0n } });
-    } else if (BigInt(video.byteSize) > 0n) {
-      await tx.storageQuota.update({
-        where: { id: 1 },
-        data: { usedBytes: { decrement: BigInt(video.byteSize) } },
-      });
     }
-    await tx.watchProgress.deleteMany({ where: { videoId: video.id } });
-    await tx.watchEvent.deleteMany({ where: { videoId: video.id } });
-    await tx.favorite.deleteMany({ where: { videoId: video.id } });
-    await tx.video.delete({ where: { id: video.id } });
+  });
+}
+
+export async function restoreVideo(
+  prisma: PrismaClient,
+  storage: MediaStorage,
+  videoId: string,
+) {
+  const video = await prisma.video.findUnique({ where: { id: videoId } });
+  if (!video) throw new UploadError("video-not-found", "Video not found");
+  if (video.status !== "ARCHIVED") {
+    throw new UploadError("video-not-archived", "Only archived videos can be restored");
+  }
+
+  let head: Awaited<ReturnType<MediaStorage["headObject"]>>;
+  try {
+    head = await storage.headObject(video.objectKey);
+  } catch {
+    throw new UploadError("archived-object-missing", "The archived video file is no longer available");
+  }
+  if (head.byteSize <= 0n || head.contentType !== "video/mp4") {
+    throw new UploadError("archived-object-missing", "The archived video file is no longer available");
+  }
+
+  return prisma.video.update({
+    where: { id: video.id },
+    data: { status: "READY", byteSize: head.byteSize, failureReason: null },
   });
 }
 

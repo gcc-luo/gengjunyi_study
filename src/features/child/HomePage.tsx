@@ -26,7 +26,7 @@ function continueLearning(childId: string | null, courses: Course[], videos: Vid
 }
 
 export function HomePage() {
-  const { currentChild, currentChildId, courses, subjects, videos, snapshot } = useAppStore();
+  const { currentChild, currentChildId, childCourses: courses, subjects, childVideos: videos, snapshot } = useAppStore();
   const publishedCourses = courses.filter((course) => course.status === CourseStatus.PUBLISHED);
   const nextVideo = continueLearning(currentChildId, courses, videos, snapshot.watchProgress);
 

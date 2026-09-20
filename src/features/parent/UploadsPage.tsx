@@ -9,6 +9,16 @@ import { uploadMultipartFile, putSignedUploadPart, type ExistingUploadPart, type
 
 const UPLOAD_SESSIONS_STORAGE_KEY = 'family-learning:upload-sessions:v1';
 const accepted = (file: File) => file.name.toLowerCase().endsWith('.mp4');
+
+export function uploadFailureMessage(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : '';
+  if (/H\.264|H264|video must use/iu.test(message)) return '视频编码需要是 H.264，请转换后重新上传。';
+  if (/AAC|audio must use/iu.test(message)) return '音频编码需要是 AAC，请转换后重新上传。';
+  if (/QuickTime MOV|not an MP4|MP4 video/iu.test(message)) return '文件容器不是标准 MP4，请导出为 MP4 后重新上传。';
+  if (/duration|时长/iu.test(message)) return '视频时长无法验证或超过限制，请检查视频后重新上传。';
+  if (/could not be read|metadata|validation/iu.test(message)) return '无法读取视频内容，请确认文件完整且可以正常播放后重新上传。';
+  return message || '上传失败，请检查网络和文件后重试。';
+}
 type UploadTask = {
   id: string;
   uploadId: string;
@@ -102,7 +112,7 @@ export function UploadsPage() {
           patchTask(task.id, { partCount: status.partCount, partSizeBytes: status.partSizeBytes, progress: Math.min(1, uploadedBytes / task.sizeBytes) }, true);
         } catch (cause) {
           if (!active) return;
-          const message = cause instanceof Error ? cause.message : '无法恢复上传状态';
+          const message = uploadFailureMessage(cause);
           patchTask(task.id, { canResume: false, error: `${message}；可重新选择文件发起上传` }, true);
         }
       }));
@@ -153,7 +163,7 @@ export function UploadsPage() {
       await refreshServerData();
     } catch (cause) {
       if (controller.signal.aborted) return;
-      const message = cause instanceof Error ? cause.message : '上传失败，请检查网络后重试';
+      const message = uploadFailureMessage(cause);
       const terminal = cause instanceof ApiError && [409, 410, 413, 422].includes(cause.status);
       patchTask(task.id, { status: 'FAILED', canResume: !terminal, error: message }, true);
     } finally {
@@ -186,7 +196,7 @@ export function UploadsPage() {
     setError(invalid.length ? `${invalid.map((file) => `“${file.name}”`).join('、')}格式或文件大小无效，仅支持非空 MP4。` : '');
     for (const file of valid) {
       try { const task = await createTask(file, targetCourseId); void startUpload(task, file); }
-      catch (cause) { setError(`${file.name}：${cause instanceof Error ? cause.message : '无法创建上传任务'}`); }
+      catch (cause) { setError(`${file.name}：${uploadFailureMessage(cause)}`); }
     }
   };
 
@@ -220,7 +230,7 @@ export function UploadsPage() {
   const eligibleCourses = courses.filter((course) => course.status !== 'PUBLISHED');
 
   return <div className="parent-page">
-    <div className="page-heading"><div><p className="eyebrow">媒体内容</p><h1>视频上传</h1><p className="page-subtitle">视频分片直传 MinIO，支持断点续传；刷新后重新选择原文件即可继续。</p></div><Link to="/parent/courses" className="button">返回课程管理</Link></div>
+    <div className="page-heading"><div><p className="eyebrow">媒体内容</p><h1>视频上传</h1><p className="page-subtitle">视频分片直传 MinIO，支持断点续传；可继续任务重新选择原文件，已结束任务需重新上传。</p></div><Link to="/parent/courses" className="button">返回课程管理</Link></div>
     <div className="upload-layout">
       <section className="upload-drop panel" role="button" tabIndex={0} aria-label="选择视频文件" onKeyDown={handleDropZoneKeyDown} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void enqueue(event.dataTransfer.files); }} onClick={openFilePicker}>
         <div className="upload-orbit">↑</div><h2>拖拽 MP4 视频到这里</h2><p>或点击选择文件，支持一次选择多个视频</p><small>仅支持 H.264 / AAC MP4；单文件不超过可用存储容量</small>

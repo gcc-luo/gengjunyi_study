@@ -2,10 +2,10 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { MediaStorage } from "../storage/minio.js";
-import { deleteVideo, UploadError } from "../services/uploads.js";
+import { deleteVideo, restoreVideo, UploadError } from "../services/uploads.js";
 
 const paramsSchema = z.object({ videoId: z.string().min(1).max(128) });
-const deleteSchema = z.object({ confirmHistoryDeletion: z.literal(true) });
+const deleteSchema = z.object({ confirmHistoryDeletion: z.literal(true).optional() }).optional().default({});
 const updateSchema = z.object({ title: z.string().trim().min(1).max(200) });
 
 export function registerVideoManagementRoutes(
@@ -35,18 +35,31 @@ export function registerVideoManagementRoutes(
     if (!params.success) {
       return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Video ID is invalid" } });
     }
-    if (!body.success) {
-      return reply.code(400).send({
-        error: { code: "CONFIRMATION_REQUIRED", message: "Confirm that learning history will also be deleted" },
-      });
-    }
+    if (!body.success) return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Archive request is invalid" } });
     try {
-      await deleteVideo(prisma, storage, { videoId: params.data.videoId, ...body.data });
+      await deleteVideo(prisma, storage, { videoId: params.data.videoId });
       return reply.code(204).send();
     } catch (error) {
       if (!(error instanceof UploadError)) throw error;
       const status = error.code === "video-not-found" ? 404 :
         error.code === "course-is-published" ? 409 : 400;
+      return reply.code(status).send({
+        error: { code: error.code.replaceAll("-", "_").toUpperCase(), message: error.message },
+      });
+    }
+  });
+
+  app.post("/api/videos/:videoId/restore", { preHandler: app.requireParent }, async (request, reply: FastifyReply) => {
+    const params = paramsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.code(400).send({ error: { code: "BAD_REQUEST", message: "Video ID is invalid" } });
+    }
+    try {
+      const video = await restoreVideo(prisma, storage, params.data.videoId);
+      return reply.send({ ...video, byteSize: BigInt(video.byteSize).toString() });
+    } catch (error) {
+      if (!(error instanceof UploadError)) throw error;
+      const status = error.code === "video-not-found" ? 404 : error.code === "video-not-archived" ? 409 : 422;
       return reply.code(status).send({
         error: { code: error.code.replaceAll("-", "_").toUpperCase(), message: error.message },
       });

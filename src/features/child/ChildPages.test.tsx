@@ -94,6 +94,8 @@ describe('child learning pages', () => {
       const url = new URL(String(input), window.location.origin);
       if (url.pathname === '/api/children') return response([{ id: 'child-one', name: '小星', avatar: '⭐', grade: '一年级', status: 'ACTIVE', createdAt: '2026-09-01T00:00:00.000Z' }]);
       if (url.pathname === '/api/courses') return response([]);
+      if (url.pathname === '/api/child/courses') return response([]);
+      if (url.pathname === '/api/settings') return response({ freeChoice: true });
       if (url.pathname === '/api/overview') return response({ totals: { children: 1, courses: 0, readyVideos: 0, watchedSeconds: 0, completedVideos: 0 }, today: { watchedSeconds: 0, events: 0 }, week: { watchedSeconds: 0, startsAt: '2026-09-14T00:00:00.000Z' }, dailyActivity: [], recentActivity: [], continueLearning: [] });
       if (url.pathname === '/api/records') return response({ total: 0, items: [] });
       if (url.pathname === '/api/auth/active-child' && init?.method === 'PUT') return selectionResponse;

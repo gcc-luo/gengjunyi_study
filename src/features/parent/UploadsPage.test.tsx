@@ -4,6 +4,8 @@ import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
 import { AuthProvider, type AuthSession } from '../../context/AuthProvider';
 import { createSeedSnapshot } from '../../data/seed';
+import { ApiError } from '../../lib/api-client';
+import { uploadFailureMessage } from './UploadsPage';
 
 vi.mock('../../lib/multipart-upload', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/multipart-upload')>();
@@ -53,6 +55,12 @@ afterEach(() => {
 });
 
 describe('real MinIO upload page', () => {
+  it('translates server media validation failures into actionable Chinese guidance', () => {
+    expect(uploadFailureMessage(new ApiError(422, 'MEDIA_VALIDATION_FAILED', 'The video must use H.264 encoding'))).toContain('视频编码需要是 H.264');
+    expect(uploadFailureMessage(new ApiError(422, 'MEDIA_VALIDATION_FAILED', 'The audio must use AAC encoding'))).toContain('音频编码需要是 AAC');
+    expect(uploadFailureMessage(new ApiError(422, 'MEDIA_VALIDATION_FAILED', 'The uploaded media could not be read'))).toContain('无法读取视频内容');
+  });
+
   it('creates a server upload, sends each part, and confirms the validated video', async () => {
     const requests = installUploadApi();
     renderUploads();

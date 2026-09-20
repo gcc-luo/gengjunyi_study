@@ -13,6 +13,7 @@ import { registerStorageRoutes } from "./routes/storage.js";
 import { registerVideoManagementRoutes } from "./routes/videos.js";
 import { registerLearningRoutes } from "./routes/learning.js";
 import { registerParentRecordRoutes } from "./routes/records.js";
+import { registerSettingsRoutes } from "./routes/settings.js";
 import { MinioStorage, type MediaStorage } from "./storage/minio.js";
 import { validateMediaUrl, type MediaValidationResult } from "./services/media-validation.js";
 import { expireOldUploads } from "./services/uploads.js";
@@ -87,6 +88,7 @@ export function buildApp({
     registerVideoManagementRoutes(parentScope, prisma, storage);
     registerLearningRoutes(parentScope, prisma, storage, config.appTimezone);
     registerParentRecordRoutes(parentScope, prisma);
+    registerSettingsRoutes(parentScope, prisma);
   });
 
   app.setErrorHandler((error, _request, reply) => {

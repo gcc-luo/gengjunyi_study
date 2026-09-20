@@ -34,7 +34,7 @@ type FullscreenDocument = Document & { webkitFullscreenElement?: Element | null;
 export function WatchPage() {
   const { videoId } = useParams();
   const navigate = useNavigate();
-  const { currentChildId, courses, videos, snapshot, saveWatchProgress, favorites, toggleFavorite, isRemote } = useAppStore();
+  const { currentChildId, childCourses: courses, childVideos: videos, snapshot, saveWatchProgress, favorites, toggleFavorite, isRemote } = useAppStore();
   const video = videos.find((item) => item.id === videoId);
   const course = video ? courses.find((item) => item.id === video.courseId) : undefined;
   const orderedVideos = useMemo(() => course ? orderVideos(course.videoIds, videos) : [], [course, videos]);
@@ -80,7 +80,7 @@ export function WatchPage() {
   playbackRateRef.current = playbackRate;
   saveWatchProgressRef.current = saveWatchProgress;
 
-  const persistProgress = useCallback((position: number, deltaWatchSeconds: number, playing: boolean, force = false) => {
+  const persistProgress = useCallback((position: number, deltaWatchSeconds: number, playing: boolean, force = false, eventType?: 'PROGRESS' | 'PLAY' | 'PAUSE' | 'SEEK' | 'ENDED') => {
     const childId = childIdRef.current;
     const currentVideoId = videoIdRef.current;
     const currentDuration = durationRef.current;
@@ -91,8 +91,9 @@ export function WatchPage() {
       videoId: currentVideoId,
       lastPositionSeconds: safePosition,
       progress: safePosition / currentDuration,
-      deltaWatchSeconds: playing ? Math.max(0, deltaWatchSeconds) : 0,
+      deltaWatchSeconds: Math.max(0, deltaWatchSeconds),
       isPlaying: playing,
+      eventType,
       updatedAt: new Date().toISOString(),
     });
     dirtyRef.current = false;
@@ -118,6 +119,7 @@ export function WatchPage() {
 
   const handleMediaSeeked = (media: HTMLVideoElement) => {
     const shouldResume = seekWasPlayingRef.current === true && !media.ended;
+    persistProgress(positionRef.current, 0, shouldResume, true, 'SEEK');
     pendingSeekPositionRef.current = null;
     seekWasPlayingRef.current = null;
     if (shouldResume && media.paused) {
@@ -125,8 +127,14 @@ export function WatchPage() {
     }
   };
 
+  const handleMediaPlay = () => {
+    isPlayingRef.current = true;
+    setIsPlaying(true);
+    persistProgress(positionRef.current, 0, true, true, 'PLAY');
+  };
+
   const handleMediaPause = () => {
-    if (isPlayingRef.current) flushProgress(true);
+    if (isPlayingRef.current) flushProgress(false, 'PAUSE');
     isPlayingRef.current = false;
     setIsPlaying(false);
   };
@@ -137,7 +145,7 @@ export function WatchPage() {
     const endPosition = clampPosition(media.duration, durationRef.current);
     positionRef.current = endPosition;
     setPositionSeconds(endPosition);
-    persistProgress(endPosition, pendingWatchSecondsRef.current, false, true);
+    persistProgress(endPosition, pendingWatchSecondsRef.current, false, true, 'ENDED');
     pendingWatchSecondsRef.current = 0;
     isPlayingRef.current = false;
     setIsPlaying(false);
@@ -169,9 +177,9 @@ export function WatchPage() {
     });
   };
 
-  const flushProgress = useCallback((playing = isPlayingRef.current) => {
+  const flushProgress = useCallback((playing = isPlayingRef.current, eventType?: 'PROGRESS' | 'PLAY' | 'PAUSE' | 'SEEK' | 'ENDED') => {
     const pending = pendingWatchSecondsRef.current;
-    persistProgress(positionRef.current, pending, playing);
+    persistProgress(positionRef.current, pending, playing, false, eventType);
     pendingWatchSecondsRef.current = 0;
   }, [persistProgress]);
 
@@ -323,7 +331,7 @@ export function WatchPage() {
     }
     if (isPlayingRef.current) {
       isPlayingRef.current = false;
-      flushProgress(true);
+      flushProgress(false, 'PAUSE');
       setIsPlaying(false);
     } else {
       isPlayingRef.current = true;
@@ -429,7 +437,7 @@ export function WatchPage() {
             setFullscreenMessage('');
             if (renewedPlayback.wasPlaying) void media.play().catch(() => setFullscreenMessage('已恢复播放位置，请点击视频继续播放。'));
           }
-        }} onSeeking={(event) => handleMediaSeeking(event.currentTarget)} onSeeked={(event) => handleMediaSeeked(event.currentTarget)} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={() => { isPlayingRef.current = true; setIsPlaying(true); }} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
+        }} onSeeking={(event) => handleMediaSeeking(event.currentTarget)} onSeeked={(event) => handleMediaSeeked(event.currentTarget)} onTimeUpdate={(event) => handleMediaTimeUpdate(event.currentTarget)} onPlay={handleMediaPlay} onPause={handleMediaPause} onEnded={handleMediaEnded} onError={() => renewPlaybackUrl()} />}
         {mediaFailed && <button className="watch-media-retry" type="button" onClick={() => renewPlaybackUrl(true)}>重新连接视频</button>}
         <button className="watch-fullscreen" type="button" aria-label={isFullscreen ? '退出全屏' : '全屏'} onClick={requestFullscreen}>⛶</button>
         {fullscreenMessage && <span className="watch-fullscreen-message" role="status">{fullscreenMessage}</span>}

@@ -31,13 +31,27 @@ describe('parent records API', () => {
     });
   });
 
-  it('prevents a child-scoped session from filtering into another child', async () => {
+  it('keeps unfiltered parent records family-wide even when a child session is active', async () => {
     const harness = makeLearningHarness({ activeChildId: 'child-1' });
+    apps.push(harness.app);
+
+    const response = await harness.app.inject({ method: 'GET', url: '/api/records', headers: parentHeaders });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(0);
+  });
+
+  it('allows a parent to explicitly filter records for another active child', async () => {
+    const harness = makeLearningHarness({
+      activeChildId: 'child-1',
+      events: [{ id: 'event-2', childId: 'child-2', videoId: 'video-1', watchedSeconds: 15, occurredAt: new Date() }],
+    });
     apps.push(harness.app);
 
     const response = await harness.app.inject({ method: 'GET', url: '/api/records?childId=child-2', headers: parentHeaders });
 
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().total).toBe(1);
   });
 
   it('rejects malformed date filters', async () => {

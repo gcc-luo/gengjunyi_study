@@ -12,7 +12,7 @@ function durationText(seconds: number): string {
 
 export function CoursePage() {
   const { courseId } = useParams();
-  const { courses, currentChildId, subjects, videos, snapshot } = useAppStore();
+  const { childCourses: courses, currentChildId, subjects, childVideos: videos, snapshot } = useAppStore();
   const [tab, setTab] = useState<'catalog' | 'intro'>('catalog');
   const course = courses.find((item) => item.id === courseId && item.status === CourseStatus.PUBLISHED);
 

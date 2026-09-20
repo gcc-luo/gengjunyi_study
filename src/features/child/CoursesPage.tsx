@@ -1,18 +1,21 @@
 import { Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../../components/EmptyState';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useAppStore } from '../../context/AppStore';
 import { getCourseProgress } from '../../lib/domain';
 import { CourseStatus } from '../../types/domain';
 import { FREE_CHOICE_STORAGE_KEY } from './preferences';
+import { apiRequest } from '../../lib/api-client';
 
 export function CoursesPage() {
-  const { courses, currentChildId, favorites, subjects, videos, snapshot } = useAppStore();
+  const { childCourses: courses, currentChildId, favorites, subjects, childVideos: videos, snapshot, isRemote } = useAppStore();
+  const settings = useQuery({ queryKey: ['family', 'settings'], queryFn: () => apiRequest<{ freeChoice: boolean }>('/api/settings'), enabled: isRemote });
   const [searchParams] = useSearchParams();
   const subjectId = searchParams.get('subject') ?? searchParams.get('subjectId') ?? '';
   const mineOnly = searchParams.get('mine') === '1';
   const favoriteOnly = searchParams.get('favorite') === '1';
-  const freeChoice = window.localStorage.getItem(FREE_CHOICE_STORAGE_KEY) !== 'false';
+  const freeChoice = isRemote ? settings.data?.freeChoice ?? true : window.localStorage.getItem(FREE_CHOICE_STORAGE_KEY) !== 'false';
   const publishedCourses = courses.filter((course) => {
     if (course.status !== CourseStatus.PUBLISHED) return false;
     if (subjectId && course.subjectId !== subjectId) return false;

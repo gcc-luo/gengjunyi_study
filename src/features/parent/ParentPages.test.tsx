@@ -199,7 +199,7 @@ describe('parent management pages', () => {
 
   it('uses the global search to open courses and match video names', () => {
     renderRoute('/parent/overview', createSeedSnapshot());
-    const search = screen.getByLabelText('搜索课程、孩子或记录');
+    const search = screen.getByLabelText('搜索课程或视频');
     fireEvent.change(search, { target: { value: '第10课' } });
     fireEvent.keyDown(search, { key: 'Enter' });
     expect(screen.getByText('小小诗人：古诗启蒙')).toBeInTheDocument();

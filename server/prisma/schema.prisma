@@ -40,6 +40,19 @@ model AdminUser {
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
   sessions     Session[]
+  settings     ParentSetting[]
+}
+
+model ParentSetting {
+  id          String    @id @default(cuid())
+  adminUserId String
+  key         String
+  value       String
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, key])
+  @@index([adminUserId])
 }
 
 model Session {

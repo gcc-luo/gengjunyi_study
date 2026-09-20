@@ -142,7 +142,6 @@ const sharedDefaults = {
   NODE_ENV: "development",
   PORT: "3000",
   APP_TIMEZONE: "Asia/Shanghai",
-  AUTH_BYPASS: "true",
 };
 
 const developmentDefaults = {
@@ -161,6 +160,7 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const nodeEnv = nodeEnvSchema.parse(env.NODE_ENV ?? sharedDefaults.NODE_ENV);
   const defaults = {
     ...sharedDefaults,
+    AUTH_BYPASS: nodeEnv === "development" ? "true" : "false",
     ...(nodeEnv === "development" ? developmentDefaults : {}),
   };
   const providedValues = Object.fromEntries(

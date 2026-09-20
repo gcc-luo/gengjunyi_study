@@ -4,7 +4,7 @@
 
 ## 当前能力
 
-- 单家庭管理员数据模型、HttpOnly 会话 Cookie 与 CSRF/来源校验；当前默认启用全局免登录，任何能访问站点的人都拥有家长管理权限，不提供公开注册。
+- 单家庭管理员数据模型、HttpOnly 会话 Cookie 与 CSRF/来源校验；仅开发环境默认免登录，生产环境需要家长账号，不提供公开注册。
 - 多孩子档案、课程草稿/发布/下架、目录排序、服务端学习记录与存储配额。
 - 浏览器向 MinIO 进行 MP4 分片直传，展示真实进度，支持失败续传；刷新后重新选择同名同大小源文件继续。
 - H.264/AAC MP4 服务端校验；私有对象经授权后以短时签名链接播放，支持 HTTP Range、断点续看、90% 完成判定。
@@ -48,7 +48,7 @@ npm run server:dev
 npm run dev
 ```
 
-访问 <http://localhost:5173>。开发环境不使用真实家庭资料或正式凭据；首次通过 `/api/auth/session` 自动使用 `npm run admin:create` 创建的管理员建立免登录会话。需要恢复密码登录时，需同时关闭 `AUTH_BYPASS` 并恢复登录界面。
+访问 <http://localhost:5173>。开发环境默认使用免登录会话；生产环境默认关闭 `AUTH_BYPASS`，需要先通过 `npm run admin:create` 创建家长账号，再从登录页进入管理中心。仅在受控内网环境下临时启用免登录模式。
 
 ## 验证
 
@@ -75,4 +75,4 @@ macOS/Linux 可运行 `RUN_MINIO_TESTS=1 npx vitest run server/test/storage/mini
 
 ## 产品边界
 
-实例不含公开注册、多家庭租户、原生 Android、视频转码、CDN、DRM、公开分享、支付或评论。部署只提供单机持久卷，不提供备份与恢复；删除视频会同时删除其学习记录。生产公网入口只开放 Caddy 的 HTTP/HTTPS 端口，数据库与 MinIO Console 不开放公网访问。
+实例不含公开注册、多家庭租户、原生 Android、视频转码、CDN、DRM、公开分享、支付或评论。部署只提供单机持久卷，不提供备份；归档视频默认保留对象、学习记录和收藏，并可从家长端恢复，不等同于备份。生产公网入口只开放 Caddy 的 HTTP/HTTPS 端口，数据库与 MinIO Console 不开放公网访问。

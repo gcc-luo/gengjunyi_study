@@ -142,7 +142,7 @@ describe("parseConfig", () => {
     });
 
     expect(config.nodeEnv).toBe("production");
-    expect(config.authBypass).toBe(true);
+    expect(config.authBypass).toBe(false);
     expect(config.databaseUrl).toBe(productionEnv.DATABASE_URL);
     expect(config.minio).toEqual({
       endpoint: productionEnv.MINIO_ENDPOINT,

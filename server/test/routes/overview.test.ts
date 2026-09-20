@@ -23,7 +23,7 @@ describe("parent overview", () => {
     });
   });
 
-  it("does not expose another child's activity when a child session is active", async () => {
+  it("keeps the parent overview family-wide when a child session is active", async () => {
     const harness = makeLearningHarness({
       activeChildId: "child-1",
       events: [{ id: "event-2", childId: "child-2", videoId: "video-1", eventType: "PROGRESS", watchedSeconds: 15, occurredAt: new Date() }],
@@ -33,8 +33,8 @@ describe("parent overview", () => {
     const response = await harness.app.inject({ method: "GET", url: "/api/overview", headers: parentHeaders });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().totals.watchedSeconds).toBe(0);
-    expect(response.json().recentActivity).toEqual([]);
+    expect(response.json().totals.watchedSeconds).toBe(15);
+    expect(response.json().recentActivity).toHaveLength(1);
   });
 
   it("uses APP_TIMEZONE local midnight when calculating today's activity", async () => {

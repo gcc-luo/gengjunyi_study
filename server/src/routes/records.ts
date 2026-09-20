@@ -20,15 +20,11 @@ export function registerParentRecordRoutes(app: FastifyInstance, prisma: PrismaC
     const parsed = querySchema.safeParse(request.query);
     if (!parsed.success) return error(reply, 400, "BAD_REQUEST", "Record filters are invalid");
     const query = parsed.data;
-    const activeChildId = request.parentSession?.activeChildId;
-    if (activeChildId && query.childId && query.childId !== activeChildId) {
-      return error(reply, 403, "CHILD_SCOPE_MISMATCH", "This session cannot access another child's learning records");
-    }
     if (query.childId) {
-      const child = await prisma.child.findUnique({ where: { id: query.childId }, select: { id: true } });
+      const child = await prisma.child.findFirst({ where: { id: query.childId, status: "ACTIVE" }, select: { id: true } });
       if (!child) return error(reply, 404, "RESOURCE_NOT_FOUND", "Child not found");
     }
-    const scopedChildId = activeChildId ?? query.childId;
+    const scopedChildId = query.childId;
     const where = {
       ...(scopedChildId ? { childId: scopedChildId } : {}),
       ...(query.from || query.to ? {

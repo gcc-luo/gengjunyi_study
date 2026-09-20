@@ -36,12 +36,48 @@ describe("child learning progress", () => {
       method: "PUT",
       url: "/api/children/child-1/videos/video-1/progress",
       headers: parentHeaders,
-      payload: { positionMs: 25_000, isPlaying: false, watchedSeconds: 30, eventType: "PAUSE" },
+      payload: { positionMs: 25_000, isPlaying: false, watchedSeconds: 0, eventType: "PAUSE" },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json().recordedWatchedSeconds).toBe(0);
     expect(harness.state.events.at(-1).watchedSeconds).toBe(0);
+  });
+
+  it("records pending played seconds on an explicit pause event", async () => {
+    const harness = makeLearningHarness({
+      events: [{ id: "prior", childId: "child-1", videoId: "video-1", eventType: "PROGRESS", watchedSeconds: 0, occurredAt: new Date(Date.now() - 20_000) }],
+    });
+    apps.push(harness.app);
+
+    const response = await harness.app.inject({
+      method: "PUT",
+      url: "/api/children/child-1/videos/video-1/progress",
+      headers: parentHeaders,
+      payload: { positionMs: 25_000, isPlaying: false, watchedSeconds: 5, eventType: "PAUSE" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().recordedWatchedSeconds).toBe(5);
+    expect(harness.state.events.at(-1).watchedSeconds).toBe(5);
+  });
+
+  it("records the final pending seconds on an ended event", async () => {
+    const harness = makeLearningHarness({
+      events: [{ id: "prior", childId: "child-1", videoId: "video-1", eventType: "PROGRESS", watchedSeconds: 0, occurredAt: new Date(Date.now() - 10_000) }],
+    });
+    apps.push(harness.app);
+
+    const response = await harness.app.inject({
+      method: "PUT",
+      url: "/api/children/child-1/videos/video-1/progress",
+      headers: parentHeaders,
+      payload: { positionMs: 100_000, isPlaying: false, watchedSeconds: 4, eventType: "ENDED" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().recordedWatchedSeconds).toBe(4);
+    expect(harness.state.events.at(-1).watchedSeconds).toBe(4);
   });
 
   it("prevents one selected child session from writing another child's progress", async () => {

@@ -91,6 +91,7 @@ class FamilyApiStub {
     }
     if (url.pathname === '/api/children' && method === 'GET') return json(this.children);
     if (url.pathname === '/api/courses' && method === 'GET') return json(this.courses.map((course) => this.coursePayload(course)));
+    if (url.pathname === '/api/child/courses' && method === 'GET') return json(this.courses.filter((course) => course.status === 'PUBLISHED').map((course) => this.coursePayload(course)));
     if (url.pathname === '/api/courses' && method === 'POST') {
       const now = new Date().toISOString();
       const course: CourseRecord = { id: 'course-e2e', title: String(body.title), subjectId: String(body.subjectId), description: String(body.description ?? ''), ageRange: String(body.ageRange ?? ''), cover: { style: String(body.coverStyle ?? 'sunrise'), colors: ['#37A7E8', '#B5ECFF'] }, status: 'DRAFT', createdAt: now, updatedAt: now, videos: [] };
@@ -134,6 +135,7 @@ class FamilyApiStub {
       return json(this.coursePayload(course));
     }
     if (url.pathname === '/api/storage' && method === 'GET') return json({ usedBytes: '0', reservedBytes: '0', totalBytes: '100000000000', availableBytes: '100000000000', warning: null });
+    if (url.pathname === '/api/settings' && method === 'GET') return json({ freeChoice: true });
     if (url.pathname === '/api/overview' && method === 'GET') return json(this.overview());
     if (url.pathname === '/api/records' && method === 'GET') {
       const items = this.recordItems(this.activeChildId ?? undefined);

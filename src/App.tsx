@@ -14,6 +14,7 @@ import { CoursesPage as ChildCoursesPage } from './features/child/CoursesPage';
 import { CoursePage as ChildCoursePage } from './features/child/CoursePage';
 import { MePage } from './features/child/MePage';
 import { WatchPage } from './features/child/WatchPage';
+import { LoginPage } from './features/auth/LoginPage';
 import { RecordsPage as ChildRecordsPage } from './features/child/RecordsPage';
 import { useAppStore } from './context/AppStore';
 import { useAuth } from './context/AuthProvider';
@@ -23,7 +24,8 @@ function RequireAuth() {
   if (auth.status === 'loading') return <main className="auth-loading" role="status">正在检查登录状态…</main>;
   if (auth.status === 'error') return <main className="auth-loading" role="alert">{auth.error ?? '无法检查登录状态'} <button type="button" onClick={() => void auth.refreshSession()}>重试</button></main>;
   if (auth.status !== 'authenticated') {
-    return <main className="auth-loading" role="alert"><p>暂时无法进入家庭空间，请检查服务运行状态后重试。</p><Link to="/">返回入口</Link></main>;
+    const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
   }
   return <Outlet />;
 }
@@ -110,7 +112,7 @@ export default function App() {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/parent" element={<ParentShell />}>
             <Route index element={<OverviewPage />} />

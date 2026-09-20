@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 import App from './App';
 import { AuthProvider, type AuthSession } from './context/AuthProvider';
@@ -27,20 +27,30 @@ it('renders two direct role-based entries without a login step', () => {
   expect(screen.getByRole('link', { name: /家长管理中心/ })).toHaveAttribute('href', '/parent/overview');
 });
 
-it('does not show a login form when a private route has no server session', () => {
+it('redirects an unauthenticated private route to the login form', () => {
   renderApp('/parent/courses?search=math', anonymousSession);
 
-  expect(window.location.pathname).toBe('/parent/courses');
-  expect(screen.getByRole('alert')).toHaveTextContent('请检查服务运行状态后重试');
-  expect(screen.queryByRole('heading', { name: '家长登录' })).not.toBeInTheDocument();
-  expect(screen.getByRole('link', { name: '返回入口' })).toHaveAttribute('href', '/');
+  expect(window.location.pathname).toBe('/login');
+  expect(screen.getByRole('heading', { name: '家长登录' })).toBeInTheDocument();
+  expect(screen.getByLabelText('登录邮箱')).toBeInTheDocument();
+  expect(screen.getByLabelText('登录密码')).toBeInTheDocument();
 });
 
-it('redirects the retired login address back to the two-entry landing page', () => {
-  renderApp('/login?next=%2Fparent%2Foverview');
+it('logs in and returns to the requested private route', async () => {
+  const session: AuthSession = { authenticated: true, admin: { id: 'admin-1', email: 'parent@example.com' }, activeChildId: null, activeChild: null, csrfToken: 'session-csrf' };
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 })));
+  renderApp('/login?next=%2Fparent%2Foverview', anonymousSession);
 
-  expect(window.location.pathname).toBe('/');
-  expect(screen.getByRole('navigation', { name: '选择学习空间' })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('登录邮箱'), { target: { value: 'parent@example.com' } });
+  fireEvent.change(screen.getByLabelText('登录密码'), { target: { value: 'Password123!' } });
+  fireEvent.click(screen.getByRole('button', { name: '登录' }));
+
+  await waitFor(() => {
+    expect(window.location.pathname).toBe('/parent/overview');
+    expect(screen.getByRole('heading', { name: '概览' })).toBeInTheDocument();
+  });
 });
 
 it('opens the child selection page directly with an authenticated server session', () => {
