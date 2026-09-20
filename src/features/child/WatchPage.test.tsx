@@ -424,11 +424,22 @@ describe('WatchPage playback loop', () => {
     await waitFor(() => expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-2.mp4'));
     fireEvent.loadedMetadata(player);
     expect(playSpy).toHaveBeenCalledOnce();
+    fireEvent.play(player);
+    Object.defineProperty(player, 'currentTime', { configurable: true, writable: true, value: 16 });
+    fireEvent.seeking(player);
+    fireEvent.seeked(player);
+    Object.defineProperty(player, 'currentTime', { configurable: true, writable: true, value: 0 });
+    fireEvent.error(player);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('00:16'));
+    await waitFor(() => expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-3.mp4'));
+    fireEvent.loadedMetadata(player);
+    expect(player.currentTime).toBe(16);
+    expect(playSpy).toHaveBeenCalledTimes(2);
     fireEvent.pause(player);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT')).toBe(true));
     const progressCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT');
-    expect(JSON.parse(String(progressCall?.[1]?.body))).toMatchObject({ positionMs: 10_000, eventType: 'PROGRESS' });
+    expect(JSON.parse(String(progressCall?.[1]?.body))).toMatchObject({ positionMs: 16_000, eventType: 'PROGRESS' });
 
-    expect(player.currentTime).toBe(10);
+    expect(player.currentTime).toBe(16);
   });
 });
