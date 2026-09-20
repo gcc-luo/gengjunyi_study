@@ -98,6 +98,28 @@ describe('WatchPage playback loop', () => {
     expect(latest.watchProgress[0]).toMatchObject({ lastPositionSeconds: 18, maxProgress: 0.9, completed: true, totalWatchSeconds: 18 });
   });
 
+  it('shows completion guidance without autoplay and supports replay or the next lesson', () => {
+    vi.useFakeTimers();
+    renderWatch();
+
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    act(() => vi.advanceTimersByTime(18_000));
+
+    expect(screen.getByRole('dialog', { name: '本集完成' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '播放下一集' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '重看本集' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '播放' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '重看本集' }));
+    expect(screen.queryByRole('dialog', { name: '本集完成' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('watch-position')).toHaveTextContent('00:00');
+    expect(screen.getByRole('button', { name: '暂停' })).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(18_000));
+    fireEvent.click(screen.getByRole('button', { name: '播放下一集' }));
+    expect(screen.getByRole('heading', { name: '第2课 加法练习' })).toBeInTheDocument();
+  });
+
   it('flushes pending watch time before completing after a playing seek', () => {
     vi.useFakeTimers();
     let latest = watchSnapshot();
@@ -443,6 +465,57 @@ describe('WatchPage playback loop', () => {
     expect(JSON.parse(String(seekCall?.[1]?.body))).toMatchObject({ positionMs: 16_000, eventType: 'SEEK' });
 
     expect(player.currentTime).toBe(16);
+  });
+
+  it('renews the private playback URL before expiry and resumes the active playback position', async () => {
+    vi.useFakeTimers();
+    const remoteSession: AuthSession = {
+      authenticated: true,
+      admin: { id: 'parent-1', email: 'parent@example.test' },
+      activeChildId: 'child-one',
+      activeChild: { id: 'child-one', name: '小星' },
+      csrfToken: 'csrf-test',
+      parentUnlocked: false,
+    };
+    const course = {
+      id: 'course-one', title: '数学小探险', subjectId: 'math', description: '', ageRange: '6-8岁',
+      cover: { style: 'sunrise', colors: ['#FFBD3F'] }, status: 'PUBLISHED', createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-02T00:00:00.000Z',
+      videos: [{ id: 'video-one', title: '第1课 认识数字', fileName: 'one.mp4', durationMs: 20_000, status: 'READY', sortOrder: 0, createdAt: '2026-09-01T00:00:00.000Z', progress: null }],
+    };
+    let playbackUrlCount = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), window.location.origin);
+      const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (url.pathname === '/api/child/profile') return body({ id: 'child-one', name: '小星', avatar: '⭐', grade: '一年级', status: 'ACTIVE', createdAt: '2026-09-01T00:00:00.000Z' });
+      if (url.pathname === '/api/child/courses') return body([course]);
+      if (url.pathname === '/api/children/child-one/records') return body({ childId: 'child-one', totalWatchedSeconds: 0, completedVideos: 0, videos: [], recentActivity: [] });
+      if (url.pathname === '/api/children/child-one/favorites') return body([]);
+      if (url.pathname === '/api/videos/video-one/playback') {
+        playbackUrlCount += 1;
+        return body({ url: `https://minio.example.test/private/video-${playbackUrlCount}.mp4`, expiresInSeconds: 10 });
+      }
+      return new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'Not found' } }), { status: 404, headers: { 'content-type': 'application/json' } });
+    }));
+
+    render(<AuthProvider initialSession={remoteSession}><AppStoreProvider><MemoryRouter initialEntries={['/child/watch/video-one']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Routes><Route path="/child/watch/:videoId" element={<WatchPage />} /></Routes></MemoryRouter></AppStoreProvider></AuthProvider>);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    }
+    const player = document.querySelector('video[aria-label="视频播放器"]') as HTMLVideoElement;
+    expect(player).toBeTruthy();
+    expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-1.mp4');
+    Object.defineProperty(player, 'currentTime', { configurable: true, writable: true, value: 7 });
+    const playSpy = vi.spyOn(player, 'play').mockResolvedValue(undefined);
+    fireEvent.play(player);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-2.mp4');
+    fireEvent.loadedMetadata(player);
+    expect(player.currentTime).toBe(7);
+    expect(playSpy).toHaveBeenCalledOnce();
+    expect(playbackUrlCount).toBe(2);
   });
 
   it('shows a failed sync honestly and retries the queued progress update', async () => {
