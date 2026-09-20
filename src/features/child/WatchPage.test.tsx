@@ -417,16 +417,18 @@ describe('WatchPage playback loop', () => {
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/videos/video-one/playback'), expect.objectContaining({ method: 'POST' }));
 
     Object.defineProperty(player, 'currentTime', { configurable: true, writable: true, value: 10 });
+    const playSpy = vi.spyOn(player, 'play').mockResolvedValue(undefined);
     fireEvent.play(player);
     fireEvent.timeUpdate(player);
+    fireEvent.error(player);
+    await waitFor(() => expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-2.mp4'));
+    fireEvent.loadedMetadata(player);
+    expect(playSpy).toHaveBeenCalledOnce();
     fireEvent.pause(player);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT')).toBe(true));
     const progressCall = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/children/child-one/videos/video-one/progress') && init?.method === 'PUT');
     expect(JSON.parse(String(progressCall?.[1]?.body))).toMatchObject({ positionMs: 10_000, eventType: 'PROGRESS' });
 
-    fireEvent.error(player);
-    await waitFor(() => expect(player).toHaveAttribute('src', 'https://minio.example.test/private/video-2.mp4'));
-    fireEvent.loadedMetadata(player);
     expect(player.currentTime).toBe(10);
   });
 });

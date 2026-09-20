@@ -133,7 +133,7 @@ export function WatchPage() {
     const media = videoElementRef.current;
     playbackResumeRef.current = {
       position: clampPosition(media?.currentTime ?? positionRef.current, durationRef.current),
-      wasPlaying: media ? !media.paused : isPlayingRef.current,
+      wasPlaying: isPlayingRef.current && !media?.ended,
     };
     renewedPlaybackRef.current = true;
     setMediaFailed(false);
