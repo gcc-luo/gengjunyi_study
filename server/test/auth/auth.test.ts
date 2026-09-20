@@ -44,6 +44,7 @@ type Session = {
   id: string;
   adminUserId: string;
   activeChildId: string | null;
+  parentUnlockedAt: Date | null;
   tokenHash: string;
   expiresAt: Date;
 };
@@ -152,6 +153,7 @@ describe("parent authentication routes", () => {
       children: [{ id: "active-child", name: "Active", status: "ACTIVE" }],
     });
     app = buildApp({ config: { ...config, authBypass: true }, prisma } as Parameters<typeof buildApp>[0]);
+    app.get("/api/parent/unlocked-check", { preHandler: app.requireParentUnlocked }, async () => ({ ok: true }));
 
     const response = await app.inject({ method: "GET", url: "/api/auth/session" });
     const rawToken = sessionTokenFrom(response);
@@ -170,6 +172,11 @@ describe("parent authentication routes", () => {
       },
       payload: { childId: "active-child" },
     });
+    const parentRequest = await app.inject({
+      method: "GET",
+      url: "/api/parent/unlocked-check",
+      headers: { cookie: `fl_parent_session=${rawToken}` },
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
@@ -180,7 +187,8 @@ describe("parent authentication routes", () => {
     });
     expect(session.json()).toMatchObject({ authenticated: true, admin: { id: "admin-1" } });
     expect(activeChild.statusCode).toBe(200);
-    expect(activeChild.json()).toMatchObject({ activeChildId: "active-child" });
+    expect(activeChild.json()).toMatchObject({ activeChildId: "active-child", parentUnlocked: true });
+    expect(parentRequest.statusCode).toBe(200);
     expect(state.sessions).toHaveLength(1);
   });
 

@@ -164,7 +164,7 @@ export function installAuthProtection(
       });
     }
     request.parentSession = session;
-    if (!session?.parentUnlockedAt || session.parentUnlockedAt.getTime() <= Date.now()) {
+    if (!config.authBypass && (!session.parentUnlockedAt || session.parentUnlockedAt.getTime() <= Date.now())) {
       return reply.code(423).send({
         error: { code: "PARENT_UNLOCK_REQUIRED", message: "Parent verification is required" },
       });

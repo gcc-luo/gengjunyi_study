@@ -196,7 +196,7 @@ export function registerAuthRoutes(
     return {
       activeChildId: child.id,
       activeChild: { id: child.id, name: child.name },
-      parentUnlocked: false,
+      parentUnlocked: config.authBypass,
     };
   });
 

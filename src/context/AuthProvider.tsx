@@ -68,7 +68,7 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
       '/api/auth/active-child', { method: 'PUT', body: JSON.stringify({ childId }) },
     );
     setState((current) => current.session?.authenticated
-      ? { ...current, session: { ...current.session, activeChildId: result.activeChildId, activeChild: result.activeChild, parentUnlocked: false } }
+      ? { ...current, session: { ...current.session, activeChildId: result.activeChildId, activeChild: result.activeChild, parentUnlocked: result.parentUnlocked ?? false } }
       : current);
     queryClient.removeQueries({ queryKey: ['child'] });
   }, []);
