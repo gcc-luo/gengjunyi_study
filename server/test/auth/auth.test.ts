@@ -5,6 +5,7 @@ import type { PrismaClient } from "../../src/generated/prisma/client";
 import { buildApp } from "../../src/app";
 import type { AppConfig } from "../../src/config";
 import { hashPassword } from "../../src/auth/password";
+import { ensureBypassAdmin } from "../../src/auth/admin-provisioning";
 import { createAnonymousCsrfToken } from "../../src/plugins/auth";
 import {
   parseCreateAdminArgs,
@@ -222,6 +223,23 @@ describe("parent authentication routes", () => {
     expect(activeChild.statusCode).toBe(200);
     expect(childRequest.statusCode).toBe(200);
     expect(childRequest.json()).toEqual({ activeChildId: "active-child" });
+  });
+
+  it("uses a scalar advisory-lock result compatible with Prisma pg adapter", async () => {
+    const { prisma } = makePrisma();
+    const queryRaw = prisma.$queryRaw as unknown as ReturnType<typeof vi.fn>;
+    queryRaw.mockImplementation(async (strings: TemplateStringsArray) => {
+      const sql = strings.raw.join("").trim();
+      if (sql.startsWith("SELECT pg_advisory_xact_lock")) {
+        throw new Error("Failed to deserialize column of type 'void'");
+      }
+      return [{ lock_acquired: 1 }];
+    });
+
+    const admin = await ensureBypassAdmin(prisma);
+
+    expect(admin.email).toBe("parent@family.test");
+    expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 
   it("disables password login while auth bypass is enabled", async () => {

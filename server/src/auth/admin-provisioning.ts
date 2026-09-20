@@ -10,7 +10,10 @@ export async function ensureBypassAdmin(
 ): Promise<{ id: string; email: string }> {
   return prisma.$transaction(async (transaction) => {
     await transaction.$queryRaw`
-      SELECT pg_advisory_xact_lock(${adminProvisioningLockKey[0]}, ${adminProvisioningLockKey[1]})
+      SELECT 1
+      FROM (
+        SELECT pg_advisory_xact_lock(${adminProvisioningLockKey[0]}, ${adminProvisioningLockKey[1]})
+      ) AS lock_acquired
     `;
 
     const existing = await transaction.adminUser.findFirst({
