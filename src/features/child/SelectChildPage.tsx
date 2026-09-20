@@ -10,6 +10,7 @@ export function SelectChildPage() {
   const [selectingChildId, setSelectingChildId] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState('');
   const activeChildren = children.filter((child) => child.status === ChildStatus.ACTIVE);
+  const hasSingleChild = activeChildren.length === 1;
 
   const selectChild = async (id: string) => {
     setSelectingChildId(id);
@@ -27,14 +28,14 @@ export function SelectChildPage() {
 
   return (
     <main className="child-page select-page">
-      <div className="select-sky" aria-hidden="true"><span className="cloud cloud-one" /><span className="cloud cloud-two" /><span className="hill hill-back" /><span className="hill hill-front" /></div>
+      <div className={`select-sky${hasSingleChild ? ' single' : ''}`} aria-hidden="true"><span className="cloud cloud-one" /><span className="cloud cloud-two" /><span className="hill hill-back" /><span className="hill hill-front" /></div>
       <div className="child-page-heading select-heading">
         <p className="child-kicker">小小学习星球</p>
         <h1>谁来学习？</h1>
         <p>选择你的头像，开始今天的学习吧</p>
       </div>
       {activeChildren.length ? (
-        <div className="select-child-grid">
+        <div className={`select-child-grid${hasSingleChild ? ' single' : ''}`}>
           {activeChildren.map((child) => (
             <button className="select-child-card" type="button" key={child.id} onClick={() => void selectChild(child.id)} aria-label={`选择${child.name}`} disabled={selectingChildId !== null}>
               <span className="select-avatar">{child.avatar}</span>

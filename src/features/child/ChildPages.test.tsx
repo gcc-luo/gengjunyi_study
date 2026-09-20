@@ -130,6 +130,19 @@ describe('child learning pages', () => {
     expect(screen.getByRole('heading', { name: '你好，哥哥' })).toBeInTheDocument();
   });
 
+  it('uses the single-child composition when only one child is active', () => {
+    renderRoute('/child/select', childSnapshot());
+
+    expect(screen.getByRole('button', { name: '选择小星' }).parentElement).toHaveClass('single');
+    expect(document.querySelector('.select-sky')).toHaveClass('single');
+
+    cleanup();
+    renderRoute('/child/select', createSeedSnapshot());
+
+    expect(screen.getByRole('button', { name: '选择哥哥' }).parentElement).not.toHaveClass('single');
+    expect(document.querySelector('.select-sky')).not.toHaveClass('single');
+  });
+
   it('blocks direct child routes until a child is selected, then allows normal navigation', () => {
     const snapshot = childSnapshot();
 
