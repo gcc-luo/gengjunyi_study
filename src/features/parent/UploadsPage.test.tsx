@@ -74,6 +74,7 @@ describe('real MinIO upload page', () => {
     const row = (await screen.findByText('第3课.mp4')).closest('.upload-task') as HTMLElement;
     await waitFor(() => expect(within(row).getByText('已完成')).toBeInTheDocument());
     expect(within(row).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
+    expect(within(row).getByRole('button', { name: '删除视频' })).toBeInTheDocument();
     expect(screen.getByText(/说明\.txt.*仅支持常见视频格式/)).toBeInTheDocument();
     expect(requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '/api/courses/course-english/uploads', method: 'POST', body: { fileName: '第3课.mp4', sizeBytes: valid.size } }),

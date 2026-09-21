@@ -510,4 +510,29 @@ describe("resumable uploads", () => {
     expect(restored.statusCode).toBe(200);
     expect(harness.state.video.status).toBe("READY");
   });
+
+  it("permanently deletes stored video files and releases the committed quota", async () => {
+    const harness = uploadHarness({ usedBytes: 100n });
+    openApps.push(harness.app);
+    harness.state.video = {
+      id: "video-1",
+      courseId: "course-1",
+      objectKey: "videos/video-1.mp4",
+      byteSize: 100n,
+      sourceByteSize: 0n,
+      status: "READY",
+    };
+
+    const response = await harness.app.inject({
+      method: "DELETE",
+      url: "/api/videos/video-1",
+      headers: parentHeaders,
+      payload: { confirmHistoryDeletion: true, permanent: true },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(harness.storage.deleteObject).toHaveBeenCalledWith("videos/video-1.mp4");
+    expect(harness.state.quota.usedBytes).toBe(0n);
+    expect(harness.state.video).toMatchObject({ status: "ARCHIVED", byteSize: 0n, sourceByteSize: 0n });
+  });
 });

@@ -31,6 +31,35 @@
 @media (max-width:900px) { .parent-content { padding:24px 18px; } .metric-grid { grid-template-columns:repeat(2,1fr); } .overview-columns,.upload-layout,.settings-grid { grid-template-columns:1fr; } .children-grid { grid-template-columns:1fr; } .parent-topbar { padding:0 18px; } }
 @media (max-width:680px) { .parent-sidebar { width:68px; padding:20px 10px; } .brand { font-size:0; justify-content:center; } .brand span { font-size:24px; } .sidebar-label,.parent-sidebar nav a:not(.active)::after,.parent-sidebar nav a { font-size:0; } .parent-sidebar nav a { justify-content:center; } .preview-link { font-size:0; text-align:center; } .preview-link:first-letter { font-size:18px; } .parent-main { margin-left:68px; width:calc(100% - 68px); } .parent-topbar { height:68px; } .parent-topbar .account { display:none; } .search-box { width:auto; flex:1; } .page-heading { align-items:stretch; flex-direction:column; } .page-heading .button { align-self:flex-start; } .upload-task { grid-template-columns:1fr; gap:8px; } .detail-hero { align-items:flex-start; flex-wrap:wrap; } .detail-actions { margin-left:0; width:100%; } }
 
+/* Video title editor */
+.video-title-form { gap:22px; }
+.video-title-field { display:grid; gap:8px; }
+.video-title-field label { color:var(--navy); font-size:13px; font-weight:700; }
+.video-title-hint { color:var(--muted); font-size:11px; line-height:1.5; }
+.video-title-input { min-height:48px; padding:12px 14px !important; border:1px solid #d9e4f2 !important; border-radius:13px !important; color:var(--navy) !important; background:linear-gradient(180deg,#fbfdff,#f5f9ff) !important; box-shadow:inset 0 1px 2px rgba(32,72,126,.04); transition:border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+.video-title-input:hover { border-color:#b8ccec !important; background:#fff !important; }
+.video-title-input:focus { border-color:var(--blue) !important; outline:none; background:#fff !important; box-shadow:0 0 0 4px rgba(45,134,245,.12),0 8px 16px rgba(45,134,245,.08); }
+.video-title-form .form-actions { padding-top:4px; margin-top:0; border-top:1px solid var(--soft-canvas); }
+
+/* Upload and transcoding are presented as one continuous task. */
+.task-progress { min-width:0; }
+.task-progress-heading { display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; color:var(--muted); font-size:11px; }
+.task-progress-heading strong { overflow:hidden; color:var(--navy); font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.task-progress .progress-fill { transition:width .35s ease; }
+.task-phase-track { display:flex; align-items:center; gap:7px; margin-top:7px; }
+.task-phase { display:inline-flex; align-items:center; gap:5px; color:#a7b5c7; font-size:10px; white-space:nowrap; }
+.task-phase::before { width:7px; height:7px; content:""; border:1px solid currentColor; border-radius:50%; }
+.task-phase-line { height:1px; flex:1; background:var(--line); }
+.task-phase.active { color:var(--blue); font-weight:600; }
+.task-phase.active::before { background:var(--blue); border-color:var(--blue); box-shadow:0 0 0 3px rgba(45,134,245,.12); }
+.task-phase.done { color:#16865d; }
+.task-phase.done::before { background:#16865d; border-color:#16865d; }
+.task-phase.failed { color:var(--red); font-weight:600; }
+.task-phase.failed::before { background:var(--red); border-color:var(--red); }
+.task-actions .danger-link { color:var(--red); }
+.task-actions button:disabled { color:#b7c3d1; cursor:not-allowed; text-decoration:none; }
+.video-file-deleted { color:var(--muted); font-size:12px; white-space:nowrap; }
+
 /* Child app: a soft, playful learning planet on a focused 390px canvas. */
 .child-shell { color:var(--ink); background:linear-gradient(180deg,#eff8ff 0%,#f8fcff 68%,#eef9f4 100%); }
 .child-shell.eye-care { filter:saturate(.82) brightness(1.025); }

@@ -37,6 +37,7 @@ function sendUploadError(reply: FastifyReply, error: unknown) {
     "archived-object-missing": 422,
     "source-unavailable": 410,
     "video-not-failed": 409,
+    "video-processing": 409,
     "course-is-published": 409,
     "confirmation-required": 400,
     "upload-not-active": 409,

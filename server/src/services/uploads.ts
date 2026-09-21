@@ -26,6 +26,7 @@ export type UploadErrorCode =
   | "archived-object-missing"
   | "source-unavailable"
   | "video-not-failed"
+  | "video-processing"
   | "upload-not-active";
 
 export class UploadError extends Error {
@@ -347,6 +348,52 @@ export async function deleteVideo(
       });
       await tx.uploadSession.update({ where: { id: upload.id }, data: { status: "ABORTED", reservedBytes: 0n } });
     }
+  });
+}
+
+export async function permanentlyDeleteVideoFiles(
+  prisma: PrismaClient,
+  storage: MediaStorage,
+  input: { videoId: string },
+) {
+  const video = await prisma.video.findUnique({ where: { id: input.videoId } });
+  if (!video) throw new UploadError("video-not-found", "Video not found");
+  const course = await prisma.course.findUnique({ where: { id: video.courseId } });
+  if (course?.status === "PUBLISHED") {
+    throw new UploadError("course-is-published", "Unpublish the course before deleting its videos");
+  }
+  if (video.status === "PROCESSING" || video.status === "UPLOADING") {
+    throw new UploadError("video-processing", "Wait until video processing finishes before deleting its files");
+  }
+
+  const upload = await prisma.uploadSession.findUnique({ where: { videoId: video.id } });
+  const objectKeys = [...new Set([video.objectKey, upload?.objectKey].filter((key): key is string => Boolean(key)))];
+  await Promise.all(objectKeys.map((key) => storage.deleteObject(key)));
+
+  await prisma.$transaction(async (tx) => {
+    await lockQuotaRow(tx);
+    const current = await tx.video.findUnique({ where: { id: video.id } });
+    if (!current || current.status === "PROCESSING" || current.status === "UPLOADING") {
+      throw new UploadError("video-processing", "Wait until video processing finishes before deleting its files");
+    }
+    const bytesToRelease = BigInt(current.byteSize ?? 0) + BigInt(current.sourceByteSize ?? 0);
+    if (bytesToRelease > 0n) {
+      await tx.storageQuota.update({
+        where: { id: 1 },
+        data: { usedBytes: { decrement: bytesToRelease } },
+      });
+    }
+    await tx.video.update({
+      where: { id: current.id },
+      data: {
+        status: "ARCHIVED",
+        byteSize: 0n,
+        sourceByteSize: 0n,
+        sourceDeletedAt: new Date(),
+        sourceDeleteAfter: null,
+        failureReason: "Video files deleted by parent",
+      },
+    });
   });
 }
 

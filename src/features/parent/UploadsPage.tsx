@@ -68,17 +68,32 @@ const taskStatus: Record<UploadTask['status'], string> = { QUEUED: '排队中', 
 const processingStageText: Record<string, string> = {
   QUEUED: '等待转码', TRANSCODING: '正在转码', VERIFYING: '正在校验', CLEANUP: '正在清理源文件', COMPLETE: '转码完成', FAILED: '转码失败',
 };
+const uploadProgressWeight = 0.7;
 const combinedProgress = (stage: string | null | undefined, progress = 0) => {
-  if (stage === 'QUEUED') return 0.72;
-  if (stage === 'TRANSCODING') return (72 + Math.round(Math.max(0, Math.min(100, progress)) * 0.26)) / 100;
+  if (stage === 'QUEUED') return uploadProgressWeight;
+  if (stage === 'TRANSCODING') return uploadProgressWeight + Math.max(0, Math.min(100, progress)) / 100 * 0.26;
   if (stage === 'VERIFYING' || stage === 'CLEANUP') return 0.97;
   if (stage === 'COMPLETE') return 1;
-  return 0.7;
+  return uploadProgressWeight;
+};
+const overallProgress = (task: UploadTask) => {
+  if (task.status === 'QUEUED') return 0;
+  if (task.status === 'UPLOADING' || task.status === 'FAILED' && !task.processingStage) return task.progress * uploadProgressWeight;
+  return task.progress;
+};
+const phaseClass = (task: UploadTask, phase: 'upload' | 'processing') => {
+  if (task.status === 'FAILED') {
+    if (phase === 'processing' && task.processingStage === 'FAILED') return 'failed';
+    if (phase === 'upload' && !task.processingStage) return 'failed';
+    return 'pending';
+  }
+  if (phase === 'upload') return task.status === 'QUEUED' || task.status === 'UPLOADING' ? 'active' : 'done';
+  return task.status === 'PROCESSING' ? 'active' : task.status === 'COMPLETED' ? 'done' : 'pending';
 };
 const sizeText = (bytes: number) => bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(2)} GB` : `${(bytes / 1_000_000).toFixed(1)} MB`;
 
 export function UploadsPage() {
-  const { courses, isRemote, retry: refreshServerData } = useAppStore();
+  const { courses, isRemote, retry: refreshServerData, deleteVideoFiles } = useAppStore();
   const queryClient = useQueryClient();
   const storageQuota = useQuery({
     queryKey: ['parent', 'storage'],
@@ -90,6 +105,7 @@ export function UploadsPage() {
   const [courseId, setCourseId] = useState(presetCourse);
   const [error, setError] = useState('');
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>(loadTasks);
+  const [deletingTaskId, setDeletingTaskId] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
   const taskRef = useRef(uploadTasks);
   const retryTaskIdRef = useRef<string>();
@@ -216,7 +232,7 @@ export function UploadsPage() {
         patchTask(task.id, { progress: 1, status: 'COMPLETED', canResume: false, videoId: result.video.id, error: undefined }, true);
         await refreshServerData();
       } else if (result.status === 'PROCESSING') {
-        patchTask(task.id, { progress: 0.72, status: 'PROCESSING', canResume: false, videoId: result.video.id, processingStage: 'QUEUED', error: undefined }, true);
+        patchTask(task.id, { progress: uploadProgressWeight, status: 'PROCESSING', canResume: false, videoId: result.video.id, processingStage: 'QUEUED', error: undefined }, true);
       } else {
         throw new Error('上传接收成功，但未能进入转码队列');
       }
@@ -264,9 +280,23 @@ export function UploadsPage() {
     if (!task.videoId) { chooseRetryFile(task); return; }
     try {
       await apiRequest(`/api/videos/${encodeURIComponent(task.videoId)}/retry-processing`, { method: 'POST' });
-      patchTask(task.id, { status: 'PROCESSING', progress: 0.72, processingStage: 'QUEUED', canResume: false, error: undefined }, true);
+      patchTask(task.id, { status: 'PROCESSING', progress: uploadProgressWeight, processingStage: 'QUEUED', canResume: false, error: undefined }, true);
     } catch (cause) {
       patchTask(task.id, { error: `${uploadFailureMessage(cause)}；请重新上传原文件。` }, true);
+    }
+  };
+  const deleteCompletedVideo = async (task: UploadTask) => {
+    if (!task.videoId || !window.confirm(`确定删除“${task.fileName}”的视频文件吗？删除后将释放 MinIO 空间，且无法恢复视频文件。`)) return;
+    setDeletingTaskId(task.id);
+    try {
+      await deleteVideoFiles(task.videoId);
+      saveTasks(taskRef.current.filter((item) => item.id !== task.id), true);
+      setError('');
+      await queryClient.invalidateQueries({ queryKey: ['parent', 'storage'] });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '删除视频文件失败，请重试');
+    } finally {
+      setDeletingTaskId(undefined);
     }
   };
   const onFilesSelected = (files: FileList | null) => {
@@ -306,6 +336,6 @@ export function UploadsPage() {
       </section>
       <section className="panel upload-settings"><div className="panel-heading"><div><h2>上传设置</h2><p>可向任意课程继续添加视频。</p></div></div><label>所属课程<select aria-label="所属课程" value={courseId} onChange={(event) => setCourseId(event.target.value)}><option value="">请选择课程</option>{eligibleCourses.map((course) => <option value={course.id} key={course.id}>{course.title}</option>)}</select></label><p className="muted-copy">MinIO 容量：{storageQuota.data ? `${sizeText(Number(storageQuota.data.availableBytes))} 可用 / ${sizeText(Number(storageQuota.data.totalBytes))}` : storageQuota.isLoading ? '读取中…' : '由服务器限制为 100 GB'}</p>{storageQuota.error && <p className="form-error" role="alert">无法读取当前剩余容量；服务端仍会在创建上传时检查容量。</p>}{error && <p className="form-error" role="alert">{error}</p>}</section>
     </div>
-    {uploadTasks.length > 0 && <section className="panel upload-queue"><div className="panel-heading"><div><h2>上传与转码队列</h2><p>{uploadTasks.filter((task) => task.status === 'COMPLETED').length} / {uploadTasks.length} 个文件已完成</p></div></div><div className="task-list">{[...uploadTasks].sort((a, b) => naturalCompare(a.fileName, b.fileName)).map((task) => { const statusText = task.status === 'PROCESSING' && task.processingStage ? processingStageText[task.processingStage] ?? taskStatus[task.status] : taskStatus[task.status]; return <div className="upload-task" key={task.id}><div className="task-file"><span className="file-mark">▣</span><div><strong>{task.fileName}</strong><small>{sizeText(task.sizeBytes)} · {statusText}{task.error ? ` · ${task.error}` : ''}</small></div></div><ProgressBar value={task.progress} label={`${task.fileName} 上传与转码进度`} /><span className={`status-badge task-status task-${task.status.toLowerCase()}`}>{statusText}</span><div className="task-actions">{task.status === 'FAILED' && <button type="button" onClick={() => task.processingStage === 'FAILED' && task.videoId ? void retryProcessing(task) : chooseRetryFile(task)}>{task.processingStage === 'FAILED' && task.videoId ? '重新转码' : task.canResume ? '选择文件续传' : '重新上传'}</button>}{(task.status === 'QUEUED' || task.status === 'UPLOADING' || task.status === 'FAILED' && task.canResume) && <button type="button" onClick={() => void cancel(task)}>取消</button>}</div></div>; })}</div></section>}
+    {uploadTasks.length > 0 && <section className="panel upload-queue"><div className="panel-heading"><div><h2>上传与转码队列</h2><p>{uploadTasks.filter((task) => task.status === 'COMPLETED').length} / {uploadTasks.length} 个文件已完成</p></div></div><div className="task-list">{[...uploadTasks].sort((a, b) => naturalCompare(a.fileName, b.fileName)).map((task) => { const statusText = task.status === 'PROCESSING' && task.processingStage ? processingStageText[task.processingStage] ?? taskStatus[task.status] : taskStatus[task.status]; const progress = overallProgress(task); const course = courses.find((item) => item.id === task.courseId); const canDelete = task.status === 'COMPLETED' && Boolean(task.videoId); return <div className="upload-task" key={task.id}><div className="task-file"><span className="file-mark">▣</span><div><strong>{task.fileName}</strong><small>{sizeText(task.sizeBytes)} · {statusText}{task.error ? ` · ${task.error}` : ''}</small></div></div><div className="task-progress"><div className="task-progress-heading"><span>整体进度</span></div><ProgressBar value={progress} label={`${task.fileName} 整体处理进度`} /><div className="task-phase-track" aria-label={`${task.fileName} 处理阶段`}><span className={`task-phase task-phase-upload ${phaseClass(task, 'upload')}`}>上传文件</span><span className="task-phase-line" /><span className={`task-phase task-phase-processing ${phaseClass(task, 'processing')}`}>视频转码</span></div></div><span className={`status-badge task-status task-${task.status.toLowerCase()}`}>{statusText}</span><div className="task-actions">{task.status === 'FAILED' && <button type="button" onClick={() => task.processingStage === 'FAILED' && task.videoId ? void retryProcessing(task) : chooseRetryFile(task)}>{task.processingStage === 'FAILED' && task.videoId ? '重新转码' : task.canResume ? '选择文件续传' : '重新上传'}</button>}{(task.status === 'QUEUED' || task.status === 'UPLOADING' || task.status === 'FAILED' && task.canResume) && <button type="button" onClick={() => void cancel(task)}>取消</button>}{canDelete && <button type="button" className="danger-link" disabled={deletingTaskId === task.id || course?.status === 'PUBLISHED'} title={course?.status === 'PUBLISHED' ? '已发布课程请先下架，再删除视频文件' : undefined} onClick={() => void deleteCompletedVideo(task)}>{deletingTaskId === task.id ? '删除中…' : '删除视频'}</button>}</div></div>; })}</div></section>}
   </div>;
 }

@@ -50,6 +50,7 @@ export interface Video {
   fileName: string;
   durationSeconds: number;
   status: VideoStatus;
+  filesDeleted?: boolean;
   orderIndex: number;
   createdAt: string;
 }

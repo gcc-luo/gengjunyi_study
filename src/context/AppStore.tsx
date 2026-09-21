@@ -46,6 +46,7 @@ export interface AppStoreValue {
   addVideo: (courseId: string, input: VideoInput) => MaybePromise<Video>;
   updateVideo: (id: string, input: Partial<VideoInput>) => MaybePromise<Video | undefined>;
   removeVideo: (id: string) => MaybePromise<void>;
+  deleteVideoFiles: (id: string) => MaybePromise<void>;
   restoreVideo: (id: string) => MaybePromise<Video | undefined>;
   createChild: (input: ChildInput) => MaybePromise<Child>;
   updateChild: (id: string, input: ChildUpdate) => MaybePromise<Child | undefined>;
@@ -156,7 +157,8 @@ function LocalAppStoreProvider({ children, initialSnapshot }: { children: ReactN
       return video;
     };
     const resetSnapshotCommand = (next?: Snapshot) => { const replacement = next ?? resetStorage(); commit(replacement); setCurrentChildId(replacement.children.find((child) => child.status === ChildStatus.ACTIVE)?.id ?? null); };
-    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, childCourses: snapshot.courses, childVideos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, isLoading: false, isRemote: false, error: null, retry: async () => undefined, overview: null, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, restoreVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, createUploadTask, updateUploadTask, completeUploadTask, resetSnapshot: resetSnapshotCommand };
+    const deleteVideoFiles = (id: string) => removeVideo(id);
+    return { snapshot, currentChildId, currentChild: snapshot.children.find((child) => child.id === currentChildId), setCurrentChild, selectChild: setCurrentChild, subjects: snapshot.subjects, children: snapshot.children, courses: snapshot.courses, videos: snapshot.videos, childCourses: snapshot.courses, childVideos: snapshot.videos, progress: scopedProgress, watchEvents: scopedEvents, favorites: currentChildId ? snapshot.favorites.filter((item) => item.childId === currentChildId) : [], uploadTasks: snapshot.uploadTasks, isLoading: false, isRemote: false, error: null, retry: async () => undefined, overview: null, createCourse, updateCourse, publishCourse, offlineCourse, addVideo, updateVideo, removeVideo, deleteVideoFiles, restoreVideo, createChild, updateChild, deactivateChild, saveWatchProgress, toggleFavorite, createUploadTask, updateUploadTask, completeUploadTask, resetSnapshot: resetSnapshotCommand };
   }, [snapshot, currentChildId]);
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
@@ -168,7 +170,7 @@ type CourseApi = {
   cover: { style: string; colors: string[] }; status: 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED';
   createdAt: string; updatedAt: string;
   videos: Array<{
-    id: string; courseId?: string; title: string; fileName: string; durationMs: number | null; status: string; sortOrder: number; createdAt: string;
+    id: string; courseId?: string; title: string; fileName: string; durationMs: number | null; status: string; filesDeleted?: boolean; sortOrder: number; createdAt: string;
     progress?: { positionMs: number; maxProgressPercent: number; completed: boolean; updatedAt: string } | null;
   }>;
 };
@@ -220,6 +222,7 @@ function mapVideoWithCourse(video: CourseApi['videos'][number], courseId: string
     fileName: video.fileName,
     durationSeconds: video.durationMs ? video.durationMs / 1000 : 0,
     status,
+    filesDeleted: video.filesDeleted ?? false,
     orderIndex: video.sortOrder + 1,
     createdAt: video.createdAt,
   };
@@ -535,6 +538,7 @@ function RemoteAppStoreProvider({ children: content }: { children: ReactNode }) 
     addVideo: async () => { throw new Error('请通过视频上传页面添加真实视频'); },
     updateVideo,
     removeVideo: async (id) => { await apiRequest(`/api/videos/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ confirmHistoryDeletion: true }) }); await invalidate(); },
+    deleteVideoFiles: async (id) => { await apiRequest(`/api/videos/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ confirmHistoryDeletion: true, permanent: true }) }); await invalidate(); },
     restoreVideo,
     createChild,
     updateChild,

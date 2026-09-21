@@ -91,6 +91,7 @@ function toCourseDto(course: CourseDtoSource) {
       title: video.title,
       fileName: video.fileName,
       failureReason: video.failureReason ?? null,
+      filesDeleted: video.failureReason === "Video files deleted by parent",
       durationMs: video.durationMs,
       status: video.status,
       sortOrder: video.sortOrder,
