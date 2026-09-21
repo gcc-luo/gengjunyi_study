@@ -64,6 +64,7 @@ describe('real MinIO upload page', () => {
   it('creates a server upload, sends each part, and confirms the validated video', async () => {
     const requests = installUploadApi();
     renderUploads();
+    expect(screen.getByRole('option', { name: '小小诗人：古诗启蒙' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-english' } });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const valid = new File(['mp4-data'], '第3课.mp4', { type: 'video/mp4' });

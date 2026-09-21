@@ -4,7 +4,7 @@ import { createAnonymousCsrfToken } from "../../src/plugins/auth";
 import { expireOldUploads } from "../../src/services/uploads";
 import { config, parentHeaders, sessionTokenHash } from "./route-test-utils";
 
-function uploadHarness(options: { usedBytes?: bigint; reservedBytes?: bigint } = {}) {
+function uploadHarness(options: { usedBytes?: bigint; reservedBytes?: bigint; courseStatus?: "DRAFT" | "PUBLISHED" | "UNPUBLISHED" } = {}) {
   const state = {
     quota: {
       id: 1,
@@ -32,7 +32,7 @@ function uploadHarness(options: { usedBytes?: bigint; reservedBytes?: bigint } =
     },
     course: {
       findUnique: vi.fn(async ({ where }: any) => where.id === "course-1"
-        ? { id: "course-1", title: "Course", status: "DRAFT" }
+        ? { id: "course-1", title: "Course", status: options.courseStatus ?? "DRAFT" }
         : null),
     },
     storageQuota: {
@@ -144,6 +144,21 @@ describe("resumable uploads", () => {
     expect(response.statusCode).toBe(400);
     expect(harness.state.quota.reservedBytes).toBe(0n);
     expect(harness.storage.createMultipartUpload).not.toHaveBeenCalled();
+  });
+
+  it("allows adding a video to a published course", async () => {
+    const harness = uploadHarness({ courseStatus: "PUBLISHED" });
+    openApps.push(harness.app);
+
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/courses/course-1/uploads",
+      headers: parentHeaders,
+      payload: { fileName: "lesson.mp4", sizeBytes: 100 },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(harness.storage.createMultipartUpload).toHaveBeenCalledOnce();
   });
 
   it.each([

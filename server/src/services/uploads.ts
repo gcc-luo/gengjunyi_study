@@ -78,9 +78,6 @@ export async function createUpload(
 
   const course = await prisma.course.findUnique({ where: { id: input.courseId } });
   if (!course) throw new UploadError("course-not-found", "Course not found");
-  if (course.status === "PUBLISHED") {
-    throw new UploadError("course-must-be-unpublished", "Unpublish the course before adding videos");
-  }
 
   const mediaId = randomUUID();
   const objectKey = `sources/${mediaId}.${extension}`;
@@ -91,9 +88,6 @@ export async function createUpload(
       await lockQuotaRow(tx);
       const currentCourse = await tx.course.findUnique({ where: { id: input.courseId } });
       if (!currentCourse) throw new UploadError("course-not-found", "Course not found");
-      if (currentCourse.status === "PUBLISHED") {
-        throw new UploadError("course-must-be-unpublished", "Unpublish the course before adding videos");
-      }
       const quota = await tx.storageQuota.findUnique({ where: { id: 1 } });
       if (!quota || BigInt(quota.usedBytes) + BigInt(quota.reservedBytes) + reservedBytes > BigInt(quota.maxBytes)) {
         throw new UploadError("quota-exceeded", "There is not enough storage space for this upload");
