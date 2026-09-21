@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { apiRequest, AUTH_UNAUTHORIZED_EVENT, setCsrfToken } from '../lib/api-client';
+import { apiRequest, AUTH_UNAUTHORIZED_EVENT, PARENT_LOCKED_EVENT, setCsrfToken } from '../lib/api-client';
 import { queryClient } from '../lib/query-client';
 
 export type AuthSession =
@@ -22,6 +22,8 @@ type AuthContextValue = {
   refreshSession: () => Promise<void>;
   setActiveChild: (childId: string) => Promise<void>;
   unlockParent: (password: string) => Promise<void>;
+  lockParent: () => Promise<void>;
+  logout: () => Promise<void>;
   parentUnlocked: boolean;
 };
 
@@ -63,6 +65,17 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
+  useEffect(() => {
+    const onParentLocked = () => {
+      queryClient.removeQueries({ queryKey: ['parent'] });
+      setState((current) => current.session?.authenticated
+        ? { ...current, session: { ...current.session, parentUnlocked: false } }
+        : current);
+    };
+    window.addEventListener(PARENT_LOCKED_EVENT, onParentLocked);
+    return () => window.removeEventListener(PARENT_LOCKED_EVENT, onParentLocked);
+  }, []);
+
   const setActiveChild = useCallback(async (childId: string) => {
     const result = await apiRequest<{ activeChildId: string; activeChild: { id: string; name: string }; parentUnlocked?: boolean }>(
       '/api/auth/active-child', { method: 'PUT', body: JSON.stringify({ childId }) },
@@ -81,6 +94,22 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
       ? { ...current, session: { ...current.session, activeChildId: result.activeChildId, activeChild: result.activeChild, parentUnlocked: result.parentUnlocked } }
       : current);
     queryClient.removeQueries({ queryKey: ['child'] });
+    await queryClient.invalidateQueries({ queryKey: ['parent'] });
+  }, []);
+
+  const lockParent = useCallback(async () => {
+    await apiRequest('/api/auth/lock-parent', { method: 'POST' });
+    queryClient.removeQueries({ queryKey: ['parent'] });
+    setState((current) => current.session?.authenticated
+      ? { ...current, session: { ...current.session, parentUnlocked: false } }
+      : current);
+  }, []);
+
+  const logout = useCallback(async () => {
+    await apiRequest('/api/auth/logout', { method: 'POST' });
+    setCsrfToken(null);
+    queryClient.clear();
+    setState({ status: 'unauthenticated', session: null, error: null });
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
@@ -88,8 +117,10 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
     refreshSession,
     setActiveChild,
     unlockParent,
+    lockParent,
+    logout,
     parentUnlocked: state.session?.authenticated ? state.session.parentUnlocked !== false : false,
-  }), [state, refreshSession, setActiveChild, unlockParent]);
+  }), [state, refreshSession, setActiveChild, unlockParent, lockParent, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

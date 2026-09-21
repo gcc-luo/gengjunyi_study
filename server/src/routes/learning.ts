@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Prisma } from "../generated/prisma/client.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { MediaStorage } from "../storage/minio.js";
+import { canChildAccessCourse } from "../services/courses.js";
 import { z } from "zod";
 
 const childParams = z.object({ childId: z.string().min(1).max(128) });
@@ -18,6 +19,17 @@ const playbackExpiresInSeconds = 2 * 60 * 60;
 
 function error(reply: FastifyReply, status: number, code: string, message: string) {
   return reply.code(status).send({ error: { code, message } });
+}
+
+async function childCanAccessVideoCourse(
+  request: FastifyRequest,
+  prisma: PrismaClient,
+  childId: string,
+  courseId: string,
+) {
+  const session = request.parentSession;
+  if (!session?.activeChildId) return true;
+  return canChildAccessCourse(prisma, childId, courseId, session.adminUserId);
 }
 
 async function getActiveChild(
@@ -151,9 +163,12 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
     if (!child) return reply;
     const video = await prisma.video.findFirst({
       where: { id: params.data.videoId, status: "READY", course: { status: "PUBLISHED" } },
-      select: { id: true, objectKey: true },
+      select: { id: true, courseId: true, objectKey: true },
     });
     if (!video) return error(reply, 404, "RESOURCE_NOT_FOUND", "Video is unavailable");
+    if (!await childCanAccessVideoCourse(request, prisma, child.id, video.courseId)) {
+      return error(reply, 404, "RESOURCE_NOT_FOUND", "Video is unavailable");
+    }
     const url = await storage.presignGetObject(video.objectKey);
     return reply.send({ url, expiresInSeconds: playbackExpiresInSeconds });
   });
@@ -166,9 +181,12 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
     if (!child) return reply;
     const video = await prisma.video.findFirst({
       where: { id: params.data.videoId, status: "READY", course: { status: "PUBLISHED" } },
-      select: { id: true, durationMs: true },
+      select: { id: true, courseId: true, durationMs: true },
     });
     if (!video || !video.durationMs || video.durationMs < 1) return error(reply, 404, "RESOURCE_NOT_FOUND", "Video is unavailable");
+    if (!await childCanAccessVideoCourse(request, prisma, child.id, video.courseId)) {
+      return error(reply, 404, "RESOURCE_NOT_FOUND", "Video is unavailable");
+    }
     if (body.data.positionMs > video.durationMs) return error(reply, 400, "POSITION_OUT_OF_RANGE", "Position exceeds the video duration");
 
     const result = await prisma.$transaction(async (tx) => {
@@ -231,7 +249,13 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
       orderBy: { createdAt: "desc" },
       include: { video: { include: { course: { include: { subject: { select: { slug: true, name: true } } } } } } },
     });
-    return reply.send(favorites.map((favorite) => ({
+    const visibleFavorites = request.parentSession?.activeChildId
+      ? (await Promise.all(favorites.map(async (favorite) => ({
+        favorite,
+        visible: await childCanAccessVideoCourse(request, prisma, child.id, favorite.video.courseId),
+      })))).filter((item) => item.visible).map((item) => item.favorite)
+      : favorites;
+    return reply.send(visibleFavorites.map((favorite) => ({
       id: favorite.id,
       childId: favorite.childId,
       videoId: favorite.videoId,
@@ -259,9 +283,12 @@ export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClien
     if (!child) return reply;
     const video = await prisma.video.findFirst({
       where: { id: body.data.videoId, status: "READY", course: { status: "PUBLISHED" } },
-      select: { id: true },
+      select: { id: true, courseId: true },
     });
     if (!video) return error(reply, 404, "RESOURCE_NOT_FOUND", "Video is unavailable");
+    if (!await childCanAccessVideoCourse(request, prisma, child.id, video.courseId)) {
+      return error(reply, 404, "RESOURCE_NOT_FOUND", "Video is unavailable");
+    }
     const key = { childId_videoId: { childId: child.id, videoId: video.id } };
     const existing = await prisma.favorite.findUnique({ where: key });
     if (existing) return reply.send(existing);

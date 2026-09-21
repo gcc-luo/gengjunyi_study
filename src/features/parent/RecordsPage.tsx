@@ -18,7 +18,7 @@ export function RecordsPage() {
     queryKey: ['parent', 'records', { childId, range, subjectId }],
     enabled: isRemote,
     queryFn: async () => {
-      type Item = { id: string; childId: string; videoId: string; effectiveWatchSeconds: number; occurredAt: string; progress: { maxProgressPercent: number; positionMs: number; completed: boolean } | null };
+      type Item = { id: string; childId: string; videoId: string; effectiveWatchSeconds: number; occurredAt: string; progress: { maxProgressPercent: number; positionMs: number; completed: boolean; updatedAt: string } | null };
       type Result = { total: number; items: Item[] };
       const params = new URLSearchParams({ limit: '500', offset: '0' });
       if (childId) params.set('childId', childId);
@@ -39,16 +39,31 @@ export function RecordsPage() {
   const recordsSnapshot = useMemo(() => {
     if (!isRemote || !recordsQuery.data) return snapshot;
     const items = recordsQuery.data.items;
+    const progressByKey = new Map<string, typeof snapshot.watchProgress[number]>();
+    for (const event of items) {
+      if (!event.progress) continue;
+      const key = `${event.childId}:${event.videoId}`;
+      if (progressByKey.has(key)) continue;
+      progressByKey.set(key, {
+        childId: event.childId,
+        videoId: event.videoId,
+        lastPositionSeconds: event.progress.positionMs / 1000,
+        maxProgress: event.progress.maxProgressPercent / 100,
+        completed: event.progress.completed,
+        totalWatchSeconds: 0,
+        updatedAt: event.progress.updatedAt,
+      });
+    }
     return {
       ...snapshot,
       watchEvents: items.map((event) => ({ id: event.id, childId: event.childId, videoId: event.videoId, effectiveWatchSeconds: event.effectiveWatchSeconds, occurredAt: event.occurredAt })),
-      watchProgress: items.flatMap((event) => event.progress ? [{ childId: event.childId, videoId: event.videoId, lastPositionSeconds: event.progress.positionMs / 1000, maxProgress: event.progress.maxProgressPercent / 100, completed: event.progress.completed, totalWatchSeconds: 0, updatedAt: event.occurredAt }] : []),
+      watchProgress: [...progressByKey.values()],
     };
   }, [snapshot, isRemote, recordsQuery.data]);
   const filtered = useMemo(() => recordsSnapshot.watchEvents.filter((event) => (!childId || event.childId === childId) && (!subjectId || recordsSnapshot.courses.some((course) => course.id === recordsSnapshot.videos.find((video) => video.id === event.videoId)?.courseId && course.subjectId === subjectId)) && keyOf(new Date(event.occurredAt)) >= rangeStartKey), [recordsSnapshot, childId, subjectId, rangeStartKey]);
   const todaySeconds = filtered.filter((event) => keyOf(new Date(event.occurredAt)) === today).reduce((sum, event) => sum + event.effectiveWatchSeconds, 0);
   const selectedChildIds = childId ? [childId] : snapshot.children.filter((child) => child.status === 'ACTIVE').map((child) => child.id);
-  const weekCompleted = recordsSnapshot.watchProgress.filter((progress) => { const video = recordsSnapshot.videos.find((item) => item.id === progress.videoId); const course = recordsSnapshot.courses.find((item) => item.id === video?.courseId); return selectedChildIds.includes(progress.childId) && progress.completed && isWithinLocalWeek(progress.updatedAt, now) && (!subjectId || course?.subjectId === subjectId); }).length;
+  const weekCompleted = new Set(recordsSnapshot.watchProgress.filter((progress) => { const video = recordsSnapshot.videos.find((item) => item.id === progress.videoId); const course = recordsSnapshot.courses.find((item) => item.id === video?.courseId); return selectedChildIds.includes(progress.childId) && progress.completed && isWithinLocalWeek(progress.updatedAt, now) && (!subjectId || course?.subjectId === subjectId); }).map((progress) => `${progress.childId}:${progress.videoId}`)).size;
   const streak = childId ? getStreakDays(filtered, childId, now) : Math.max(0, ...selectedChildIds.map((id) => getStreakDays(filtered, id, now)));
   const days = Array.from({ length: 7 }, (_, index) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - index)));
   const maxSeconds = Math.max(60, ...days.map((date) => filtered.filter((event) => keyOf(new Date(event.occurredAt)) === keyOf(date)).reduce((sum, event) => sum + event.effectiveWatchSeconds, 0)));

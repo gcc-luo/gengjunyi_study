@@ -44,7 +44,7 @@ type Session = {
   id: string;
   adminUserId: string;
   activeChildId: string | null;
-  parentUnlockedAt: Date | null;
+  parentUnlockedUntil: Date | null;
   tokenHash: string;
   expiresAt: Date;
 };
@@ -345,6 +345,61 @@ describe("parent authentication routes", () => {
     expect(state.sessions[0].tokenHash).not.toBe(rawToken);
     expect(state.sessions[0].expiresAt.getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
     expect(state.sessions[0].expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    expect(state.sessions[0].parentUnlockedUntil!.getTime()).toBeGreaterThan(Date.now() + 14 * 60 * 1000);
+  });
+
+  it("keeps parent mode unlocked for a bounded window and supports explicit locking and unlocking", async () => {
+    const { prisma } = makePrisma({ admins: [await createAdmin()] });
+    app = buildApp({ config, prisma } as Parameters<typeof buildApp>[0]);
+    app.get("/api/parent/unlocked-check", { preHandler: app.requireParentUnlocked }, async () => ({ ok: true }));
+    const anonymous = await app.inject({ method: "GET", url: "/api/auth/session" });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: { origin: config.appOrigin, "x-csrf-token": anonymous.json().csrfToken },
+      payload: { email: "parent@example.com", password: "correct horse battery staple" },
+    });
+    const cookie = `fl_parent_session=${sessionTokenFrom(login)}`;
+    const headers = { origin: config.appOrigin, "x-csrf-token": login.json().csrfToken, cookie };
+
+    expect((await app.inject({ method: "GET", url: "/api/parent/unlocked-check", headers: { cookie } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "POST", url: "/api/auth/lock-parent", headers })).statusCode).toBe(204);
+    expect((await app.inject({ method: "GET", url: "/api/parent/unlocked-check", headers: { cookie } })).statusCode).toBe(423);
+
+    const unlocked = await app.inject({
+      method: "POST",
+      url: "/api/auth/unlock-parent",
+      headers,
+      payload: { password: "correct horse battery staple" },
+    });
+    expect(unlocked.statusCode).toBe(200);
+    expect(unlocked.json()).toMatchObject({ parentUnlocked: true, activeChildId: null });
+    expect((await app.inject({ method: "GET", url: "/api/parent/unlocked-check", headers: { cookie } })).statusCode).toBe(200);
+  });
+
+  it("rate limits repeated parent unlock failures", async () => {
+    const { prisma } = makePrisma({ admins: [await createAdmin()] });
+    app = buildApp({ config, prisma } as Parameters<typeof buildApp>[0]);
+    const anonymous = await app.inject({ method: "GET", url: "/api/auth/session" });
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: { origin: config.appOrigin, "x-csrf-token": anonymous.json().csrfToken },
+      payload: { email: "parent@example.com", password: "correct horse battery staple" },
+    });
+    const headers = {
+      origin: config.appOrigin,
+      "x-csrf-token": login.json().csrfToken,
+      cookie: `fl_parent_session=${sessionTokenFrom(login)}`,
+    };
+    await app.inject({ method: "POST", url: "/api/auth/lock-parent", headers });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const failed = await app.inject({ method: "POST", url: "/api/auth/unlock-parent", headers, payload: { password: "wrong password" } });
+      expect(failed.statusCode).toBe(401);
+    }
+    const limited = await app.inject({ method: "POST", url: "/api/auth/unlock-parent", headers, payload: { password: "wrong password" } });
+    expect(limited.statusCode).toBe(429);
   });
 
   it("sets Secure cookies in production", async () => {

@@ -34,6 +34,7 @@ const maxTrackedLoginIps = 10_000;
 // At most two fixed IP windows can overlap a rolling account window.
 const maxTrackedAccountsPerIp = maxLoginAttemptsPerIp * 2;
 const loginWindowMs = 15 * 60 * 1000;
+export const parentUnlockLifetimeMs = 15 * 60 * 1000;
 
 type AccountLoginBucket = { count: number; expiresAt: number };
 type IpLoginBucket = {
@@ -41,6 +42,7 @@ type IpLoginBucket = {
   expiresAt: number;
   accounts: Map<string, AccountLoginBucket>;
 };
+type UnlockBucket = { count: number; expiresAt: number };
 
 function errorResponse(code: string, message: string) {
   return { error: { code, message } };
@@ -56,7 +58,12 @@ async function createParentSession(
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
   const expiresAt = new Date(Date.now() + config.sessionLifetimeSeconds * 1000);
   const session = await prisma.session.create({
-    data: { adminUserId: admin.id, tokenHash, expiresAt, parentUnlockedAt: new Date() },
+    data: {
+      adminUserId: admin.id,
+      tokenHash,
+      expiresAt,
+      parentUnlockedUntil: new Date(Date.now() + parentUnlockLifetimeMs),
+    },
   });
 
   reply.setCookie(config.sessionCookieName, rawToken, {
@@ -101,6 +108,7 @@ export function registerAuthRoutes(
 ): void {
   const loginIpBuckets = new Map<string, IpLoginBucket>();
   const loginIpLimit = createLoginIpLimit(loginIpBuckets, config);
+  const unlockBuckets = new Map<string, UnlockBucket>();
 
   app.get("/api/auth/session", async (request, reply) => {
     const rawToken = request.cookies[config.sessionCookieName];
@@ -132,7 +140,7 @@ export function registerAuthRoutes(
         ? { id: session.activeChild.id, name: session.activeChild.name }
         : null,
       csrfToken: createSessionCsrfToken(config.sessionSecret, session.tokenHash),
-      parentUnlocked: config.authBypass || Boolean(session.parentUnlockedAt && session.parentUnlockedAt.getTime() > Date.now()),
+      parentUnlocked: config.authBypass || Boolean(session.parentUnlockedUntil && session.parentUnlockedUntil.getTime() > Date.now()),
     };
   });
 
@@ -191,7 +199,7 @@ export function registerAuthRoutes(
 
     await prisma.session.update({
       where: { id: session.id },
-      data: { activeChildId: child.id, parentUnlockedAt: null },
+      data: { activeChildId: child.id, parentUnlockedUntil: null },
     });
     return {
       activeChildId: child.id,
@@ -206,12 +214,38 @@ export function registerAuthRoutes(
     const parsed = unlockParentBodySchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send(errorResponse("BAD_REQUEST", "Password is required"));
     if (!config.authBypass) {
+      const now = Date.now();
+      for (const [key, bucket] of unlockBuckets) {
+        if (bucket.expiresAt <= now) unlockBuckets.delete(key);
+      }
+      const key = createHmac("sha256", config.sessionSecret)
+        .update(normalizeIP(request.ip, 64))
+        .update("\0")
+        .update(session.adminUserId)
+        .digest("base64url");
+      const bucket = unlockBuckets.get(key) ?? { count: 0, expiresAt: now + loginWindowMs };
+      if (bucket.count >= maxLoginAttemptsPerAccountAndIp) return loginRateLimitError(reply);
       const admin = await prisma.adminUser.findUnique({ where: { id: session.adminUserId } });
       const passwordMatches = await verifyPassword(parsed.data.password, admin?.passwordHash);
-      if (!passwordMatches) return reply.code(401).send(errorResponse("INVALID_CREDENTIALS", "Password is incorrect"));
+      if (!passwordMatches) {
+        bucket.count += 1;
+        unlockBuckets.set(key, bucket);
+        return reply.code(401).send(errorResponse("INVALID_CREDENTIALS", "Password is incorrect"));
+      }
+      unlockBuckets.delete(key);
     }
-    await prisma.session.update({ where: { id: session.id }, data: { parentUnlockedAt: new Date(), activeChildId: null } });
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { parentUnlockedUntil: new Date(Date.now() + parentUnlockLifetimeMs), activeChildId: null },
+    });
     return { parentUnlocked: true, activeChildId: null, activeChild: null };
+  });
+
+  app.post("/api/auth/lock-parent", { preHandler: app.requireParent }, async (request, reply) => {
+    const session = request.parentSession;
+    if (!session) return reply.code(401).send(errorResponse("AUTH_REQUIRED", "Parent authentication is required"));
+    await prisma.session.update({ where: { id: session.id }, data: { parentUnlockedUntil: null } });
+    return reply.code(204).send();
   });
 }
 

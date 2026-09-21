@@ -59,9 +59,10 @@ it('opens the child selection page directly with an authenticated server session
   expect(screen.getByRole('heading', { name: '谁来学习？' })).toBeInTheDocument();
 });
 
-it('opens the parent workbench directly without a logout control', () => {
+it('offers explicit parent locking and logout controls', () => {
   renderApp('/parent/overview');
 
   expect(screen.getByRole('heading', { name: '概览' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: '退出登录' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '锁定家长端' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '退出登录' })).toBeInTheDocument();
 });

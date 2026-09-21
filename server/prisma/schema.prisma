@@ -59,7 +59,7 @@ model Session {
   id            String    @id @default(cuid())
   adminUserId   String
   activeChildId String?
-  parentUnlockedAt DateTime? @db.Timestamptz(3)
+  parentUnlockedUntil DateTime? @db.Timestamptz(3)
   tokenHash     String    @unique
   expiresAt     DateTime  @db.Timestamptz(3)
   createdAt     DateTime  @default(now()) @db.Timestamptz(3)

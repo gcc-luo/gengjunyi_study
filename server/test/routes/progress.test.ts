@@ -110,6 +110,22 @@ describe("child learning progress", () => {
     expect(harness.state.progress).toHaveLength(0);
   });
 
+  it("does not write progress for an unassigned course", async () => {
+    const harness = makeLearningHarness({ freeChoice: false, assignedCourseIds: [] });
+    apps.push(harness.app);
+
+    const response = await harness.app.inject({
+      method: "PUT",
+      url: "/api/children/child-1/videos/video-1/progress",
+      headers: parentHeaders,
+      payload: { positionMs: 10_000, isPlaying: true, watchedSeconds: 10, eventType: "PROGRESS" },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(harness.state.progress).toHaveLength(0);
+    expect(harness.state.events).toHaveLength(0);
+  });
+
   it("derives billable watch time from server elapsed time, capped at 30 seconds", async () => {
     vi.spyOn(Date, "now").mockReturnValue(new Date("2026-09-17T10:00:45.000Z").getTime());
     const harness = makeLearningHarness({

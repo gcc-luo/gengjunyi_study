@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth, type AuthSession } from './AuthProvider';
-import { AUTH_UNAUTHORIZED_EVENT } from '../lib/api-client';
+import { AUTH_UNAUTHORIZED_EVENT, PARENT_LOCKED_EVENT } from '../lib/api-client';
 import { queryClient } from '../lib/query-client';
 
 const authenticatedSession: AuthSession = {
@@ -15,7 +15,7 @@ const anonymousSession: AuthSession = { authenticated: false, activeChildId: nul
 
 function Probe() {
   const auth = useAuth();
-  return <output data-testid="state">{auth.status}</output>;
+  return <><output data-testid="state">{auth.status}</output><output data-testid="parent-state">{auth.parentUnlocked ? 'unlocked' : 'locked'}</output></>;
 }
 
 describe('AuthProvider', () => {
@@ -44,5 +44,14 @@ describe('AuthProvider', () => {
   it('supports an anonymous boot session without exposing private data', () => {
     render(<AuthProvider initialSession={anonymousSession}><Probe /></AuthProvider>);
     expect(screen.getByTestId('state')).toHaveTextContent('unauthenticated');
+  });
+
+  it('keeps the authenticated session while reacting to a parent lock response', async () => {
+    render(<AuthProvider initialSession={authenticatedSession}><Probe /></AuthProvider>);
+
+    await act(async () => { window.dispatchEvent(new Event(PARENT_LOCKED_EVENT)); });
+
+    expect(screen.getByTestId('state')).toHaveTextContent('authenticated');
+    expect(screen.getByTestId('parent-state')).toHaveTextContent('locked');
   });
 });

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import App from '../../App';
 import { AppStoreProvider } from '../../context/AppStore';
@@ -30,6 +30,7 @@ function emptySnapshot(): Snapshot {
 
 afterEach(() => {
   window.history.pushState({}, '', '/');
+  vi.unstubAllGlobals();
 });
 
 describe('parent management pages', () => {
@@ -195,6 +196,35 @@ describe('parent management pages', () => {
     expect(screen.getByText('本周完成视频')).toBeInTheDocument();
     expect(screen.getByTestId('records-week-completed')).toHaveTextContent('1');
     expect(screen.getByTestId('records-streak')).toHaveTextContent('0');
+  });
+
+  it('counts a completed video once even when multiple watch events reference it', async () => {
+    const now = new Date().toISOString();
+    const course = {
+      id: 'course-one', title: '数学课', subjectId: 'math', description: '', ageRange: '6-8岁',
+      cover: { style: 'sunrise', colors: ['#2D86F5'] }, status: 'PUBLISHED', createdAt: now, updatedAt: now,
+      videos: [{ id: 'video-one', courseId: 'course-one', title: '第一课', fileName: 'one.mp4', durationMs: 60_000, status: 'READY', sortOrder: 0, createdAt: now }],
+    };
+    const records = {
+      total: 2, limit: 500, offset: 0,
+      items: ['event-1', 'event-2'].map((id) => ({
+        id, childId: 'child-one', videoId: 'video-one', effectiveWatchSeconds: 10, occurredAt: now,
+        progress: { maxProgressPercent: 100, positionMs: 60_000, completed: true, updatedAt: now },
+      })),
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), window.location.origin);
+      const body = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (url.pathname === '/api/children') return body([{ id: 'child-one', name: '小星', avatar: '⭐', grade: '一年级', status: 'ACTIVE', createdAt: now }]);
+      if (url.pathname === '/api/courses') return body([course]);
+      if (url.pathname === '/api/overview') return body({ totals: { children: 1, courses: 1, readyVideos: 1, watchedSeconds: 20, completedVideos: 1 }, today: { watchedSeconds: 20, events: 2 }, week: { watchedSeconds: 20, startsAt: now }, dailyActivity: [], recentActivity: [], continueLearning: [] });
+      if (url.pathname === '/api/records') return body(records);
+      return new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'Not found' } }), { status: 404, headers: { 'content-type': 'application/json' } });
+    }));
+    window.history.pushState({}, '', '/parent/records');
+    render(<AuthProvider initialSession={testSession}><AppStoreProvider><App /></AppStoreProvider></AuthProvider>);
+
+    await waitFor(() => expect(screen.getByTestId('records-week-completed')).toHaveTextContent('1'));
   });
 
   it('uses the global search to open courses and match video names', () => {

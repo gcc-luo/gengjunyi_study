@@ -75,6 +75,7 @@ export function registerParentRecordRoutes(app: FastifyInstance, prisma: PrismaC
             maxProgressPercent: progressByKey.get(`${row.childId}:${row.videoId}`)!.maxProgressPercent,
               positionMs: progressByKey.get(`${row.childId}:${row.videoId}`)!.positionMs,
               completed: progressByKey.get(`${row.childId}:${row.videoId}`)!.completed,
+              updatedAt: progressByKey.get(`${row.childId}:${row.videoId}`)!.updatedAt,
             }
           : null,
         effectiveWatchSeconds: row.watchedSeconds,

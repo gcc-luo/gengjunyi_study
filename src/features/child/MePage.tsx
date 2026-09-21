@@ -7,7 +7,7 @@ import { APP_VERSION, readEyeCarePreference, writeEyeCarePreference } from './pr
 import { useState } from 'react';
 
 export function MePage() {
-  const { currentChild, currentChildId, courses, snapshot } = useAppStore();
+  const { currentChild, currentChildId, childCourses: courses, snapshot } = useAppStore();
   const [eyeCare, setEyeCare] = useState(readEyeCarePreference);
 
   if (!currentChild || !currentChildId) return <main className="child-page"><EmptyState title="还没有选择孩子" description="先选择一个孩子，再查看学习成长。" action={<Link className="button primary" to="/child/select">去选择孩子</Link>} /></main>;
