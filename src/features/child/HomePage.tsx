@@ -4,10 +4,10 @@ import { Icon } from '../../components/Icon';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useAppStore } from '../../context/AppStore';
 import { getCourseProgress } from '../../lib/domain';
-import englishCardPoster from '../../assets/subjects/english-card-poster.png';
-import chineseCardPoster from '../../assets/subjects/chinese-card-poster.png';
-import mathCardPoster from '../../assets/subjects/math-card-poster.png';
-import scienceCardPoster from '../../assets/subjects/science-card-poster.png';
+import englishCardPoster from '../../assets/subjects/english-card-poster.webp';
+import chineseCardPoster from '../../assets/subjects/chinese-card-poster.webp';
+import mathCardPoster from '../../assets/subjects/math-card-poster.webp';
+import scienceCardPoster from '../../assets/subjects/science-card-poster.webp';
 import { CourseStatus, VideoStatus, type Course, type SubjectId, type Video } from '../../types/domain';
 
 const subjectBackgrounds: Record<SubjectId, string> = {

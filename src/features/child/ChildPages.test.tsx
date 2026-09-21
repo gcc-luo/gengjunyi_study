@@ -60,6 +60,7 @@ function recordsSnapshot(): Snapshot {
 afterEach(() => {
   cleanup();
   queryClient.clear();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
@@ -198,10 +199,10 @@ describe('child learning pages', () => {
       screen.getByRole('link', { name: '数学' }),
       screen.getByRole('link', { name: '科普' }),
     ];
-    expect(cards[0]).toHaveStyle({ backgroundImage: expect.stringContaining('english-card-poster.png') });
-    expect(cards[1]).toHaveStyle({ backgroundImage: expect.stringContaining('chinese-card-poster.png') });
-    expect(cards[2]).toHaveStyle({ backgroundImage: expect.stringContaining('math-card-poster.png') });
-    expect(cards[3]).toHaveStyle({ backgroundImage: expect.stringContaining('science-card-poster.png') });
+    expect(cards[0].getAttribute('style')).toContain('english-card-poster.webp');
+    expect(cards[1].getAttribute('style')).toContain('chinese-card-poster.webp');
+    expect(cards[2].getAttribute('style')).toContain('math-card-poster.webp');
+    expect(cards[3].getAttribute('style')).toContain('science-card-poster.webp');
   });
 
   it('shows the current child course progress only on home', () => {
@@ -289,6 +290,8 @@ describe('child learning pages', () => {
   });
 
   it('aggregates records for the selected child and switches between stats and history', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T12:00:00+08:00'));
     renderRoute('/child/select', recordsSnapshot());
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
     fireEvent.click(screen.getByRole('link', { name: '我的' }));
