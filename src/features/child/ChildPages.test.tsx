@@ -216,6 +216,16 @@ describe('child learning pages', () => {
     expect(screen.queryByText('哥哥')).not.toBeInTheDocument();
   });
 
+  it('renders subject sticker badges for the child course list', () => {
+    renderRoute('/child/select', createSeedSnapshot());
+    fireEvent.click(screen.getByRole('button', { name: '选择哥哥' }));
+
+    expect(screen.getByTestId('subject-sticker-chinese')).toHaveClass('subject-sticker-chinese');
+    expect(screen.getByTestId('subject-sticker-science')).toHaveClass('subject-sticker-science');
+    expect(screen.getByTestId('subject-sticker-chinese').querySelector('svg')).toBeInTheDocument();
+    expect(screen.getByTestId('subject-sticker-chinese')).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('filters courses by subject query and links READY videos to the player', () => {
     renderRoute('/child/select', childSnapshot());
     fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
