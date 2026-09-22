@@ -113,6 +113,7 @@ describe('real MinIO upload page', () => {
       status: 'UPLOADING', canResume: true,
     }]));
     renderUploads();
+    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-chinese' } });
 
     const row = (await screen.findByText('原文件.mp4')).closest('.upload-task') as HTMLElement;
     fireEvent.click(within(row).getByRole('button', { name: '选择文件续传' }));
@@ -122,5 +123,22 @@ describe('real MinIO upload page', () => {
     await waitFor(() => expect(within(row).getByText('已完成')).toBeInTheDocument());
     expect(requests.some((request) => request.path.endsWith('/parts/1/url'))).toBe(false);
     expect(requests.some((request) => request.path.endsWith('/complete'))).toBe(true);
+  });
+
+  it('filters the queue to the selected course instead of showing every course', () => {
+    window.localStorage.setItem(uploadKey, JSON.stringify([
+      { id: 'english-task', uploadId: 'english-upload', courseId: 'course-english', fileName: '英语.mp4', sizeBytes: 4, lastModified: 1, partCount: 1, partSizeBytes: 16, progress: 1, status: 'COMPLETED', canResume: false, videoId: 'english-video' },
+      { id: 'chinese-task', uploadId: 'chinese-upload', courseId: 'course-chinese', fileName: '语文.mp4', sizeBytes: 4, lastModified: 2, partCount: 1, partSizeBytes: 16, progress: 1, status: 'COMPLETED', canResume: false, videoId: 'chinese-video' },
+    ]));
+    renderUploads();
+
+    expect(screen.getByTestId('upload-queue')).toHaveTextContent('请选择所属课程后查看对应的视频队列。');
+    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-english' } });
+    expect(screen.getByText('英语.mp4')).toBeInTheDocument();
+    expect(screen.queryByText('语文.mp4')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('所属课程'), { target: { value: 'course-chinese' } });
+    expect(screen.getByText('语文.mp4')).toBeInTheDocument();
+    expect(screen.queryByText('英语.mp4')).not.toBeInTheDocument();
   });
 });
