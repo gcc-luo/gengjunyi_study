@@ -240,10 +240,30 @@ describe('child learning pages', () => {
     expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'course-catalog-panel');
     expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-label', '课程目录，可滚动查看更多');
     expect(within(screen.getByTestId('video-row-ready-video')).getByRole('img', { name: '认识数字视频缩略图' })).toHaveAttribute('src', '/api/videos/ready-video/thumbnail');
-    expect(screen.getByRole('link', { name: /认识数字/ })).toHaveAttribute('href', '/child/watch/ready-video');
+    const readyRow = screen.getByTestId('video-row-ready-video');
+    expect(readyRow).toHaveAttribute('href', '/child/watch/ready-video');
+    expect(within(readyRow).getByRole('progressbar', { name: '认识数字学习进度' })).toHaveAttribute('aria-valuenow', '100');
+    expect(screen.queryByText('开始学习')).not.toBeInTheDocument();
+    expect(screen.queryByText('继续学习')).not.toBeInTheDocument();
     expect(within(screen.getByTestId('video-row-loading-video')).getByText('暂不可播放')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '课程介绍' }));
     expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'course-intro-panel');
+  });
+
+  it('shows lesson progress and keeps the whole lesson row clickable', () => {
+    const snapshot = childSnapshot();
+    snapshot.watchProgress[0] = { ...snapshot.watchProgress[0], lastPositionSeconds: 77, maxProgress: 0.64, completed: false, totalWatchSeconds: 77 };
+    renderRoute('/child/select', snapshot);
+    fireEvent.click(screen.getByRole('button', { name: '选择小星' }));
+    fireEvent.click(screen.getByRole('link', { name: '数学' }));
+    fireEvent.click(screen.getByRole('link', { name: /数学小探险/ }));
+
+    const row = screen.getByTestId('video-row-ready-video');
+    expect(row).toHaveAttribute('href', '/child/watch/ready-video');
+    expect(row).toHaveTextContent('已学习 64%');
+    expect(within(row).getByRole('progressbar', { name: '认识数字学习进度' })).toHaveAttribute('aria-valuenow', '64');
+    expect(screen.queryByText('继续学习')).not.toBeInTheDocument();
+    expect(screen.queryByText('开始学习')).not.toBeInTheDocument();
   });
 
   it('persists eye-care preference and toggles the child shell class', () => {
