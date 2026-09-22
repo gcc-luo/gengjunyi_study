@@ -1,69 +1,63 @@
 import type { ReactNode } from 'react';
 import type { SubjectId } from '../types/domain';
 
-function EnglishSticker() {
+function EnglishArt() {
   return <>
-    <rect x="13" y="12" width="25" height="29" rx="6" fill="#fff" opacity=".92" transform="rotate(-8 25 27)" />
-    <text x="19" y="32" fill="var(--sticker-main)" fontSize="18" fontWeight="800" fontFamily="Noto Sans SC, Microsoft YaHei, sans-serif">A</text>
-    <path d="m37 38 12-20 4 4-12 20-6 2 2-6Z" fill="var(--sticker-accent)" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
-    <path d="m47 22 4 4" stroke="#ff8a6f" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="m39 36 4 4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+    <rect x="15" y="15" width="23" height="27" rx="5" fill="#fff" opacity=".96" transform="rotate(-7 27 28)" />
+    <text x="21" y="34" fill="var(--sticker-main)" fontSize="17" fontWeight="800" fontFamily="Noto Sans SC, Microsoft YaHei, sans-serif">A</text>
+    <path d="m38 39 10-18 5 5-11 18-6 2 2-7Z" fill="var(--sticker-accent)" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
+    <path d="m47 23 5 5" stroke="#f47e83" strokeWidth="1.5" strokeLinecap="round" />
   </>;
 }
 
-function ChineseSticker() {
+function ChineseArt() {
   return <>
-    <path d="M11 24c8-5 13-4 21 1v18c-8-4-13-4-21-1V24Z" fill="#fff" opacity=".94" />
-    <path d="M53 12 43 22l-4-4L49 8l4 4Z" fill="var(--sticker-accent)" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
-    <path d="m40 19-7 15" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
-    <path d="M32 25c-6-3-11-3-17 0M32 29c-6-3-11-3-17 0M32 34c-6-3-11-3-17 0" stroke="var(--sticker-main)" strokeWidth="1.4" strokeLinecap="round" opacity=".75" />
-    <text x="36" y="43" fill="#fff" fontSize="16" fontWeight="800" fontFamily="Noto Sans SC, Microsoft YaHei, sans-serif">文</text>
+    <path d="M12 25c7-4 12-3 20 1v17c-8-3-13-3-20-1V25ZM52 25c-7-4-12-3-20 1v17c8-3 13-3 20-1V25Z" fill="#fff" opacity=".96" />
+    <path d="M32 26v17" stroke="#bebaff" strokeWidth="1.5" />
+    <path d="m42 13 9 9-12 12-4-4 7-17Z" fill="var(--sticker-accent)" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
+    <path d="m39 18-6 15" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
   </>;
 }
 
-function MathSticker() {
+function MathArt() {
   return <>
-    <rect x="13" y="28" width="13" height="15" rx="3" fill="#fff" opacity=".92" />
-    <rect x="26" y="21" width="14" height="22" rx="3" fill="var(--sticker-accent)" stroke="#fff" strokeWidth="1.6" />
-    <rect x="40" y="14" width="11" height="29" rx="3" fill="#fff" opacity=".94" />
-    <text x="16" y="39" fill="var(--sticker-main)" fontSize="9" fontWeight="800" fontFamily="Noto Sans SC, Microsoft YaHei, sans-serif">1</text>
-    <text x="29" y="36" fill="#fff" fontSize="11" fontWeight="800" fontFamily="Noto Sans SC, Microsoft YaHei, sans-serif">2</text>
-    <text x="42" y="33" fill="var(--sticker-main)" fontSize="9" fontWeight="800" fontFamily="Noto Sans SC, Microsoft YaHei, sans-serif">3</text>
-    <path d="M47 10v5M44.5 12.5h5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+    <rect x="12" y="29" width="12" height="13" rx="3" fill="#fff" opacity=".96" />
+    <rect x="26" y="22" width="13" height="20" rx="3" fill="#fff" opacity=".82" />
+    <rect x="41" y="14" width="11" height="28" rx="3" fill="#fff" opacity=".96" />
+    <path d="M18 24v-7M14.5 20.5h7" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="47" cy="21" r="2" fill="var(--sticker-accent)" />
   </>;
 }
 
-function ScienceSticker() {
+function ScienceArt() {
   return <>
-    <circle cx="45" cy="17" r="7" fill="var(--sticker-accent)" opacity=".9" />
-    <path d="M25 13c5 1 12 7 14 13l-8 10-10-8c-2-5 0-11 4-15Z" fill="#fff" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
-    <path d="m22 29-7 7 8-2 5-5" fill="var(--sticker-accent)" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
-    <path d="m32 21 7-7" stroke="var(--sticker-main)" strokeWidth="2" strokeLinecap="round" />
-    <circle cx="29" cy="25" r="3" fill="var(--sticker-main)" />
-    <path d="m48 33 1.5 3.5L53 38l-3.5 1.5L48 43l-1.5-3.5L43 38l3.5-1.5L48 33Z" fill="#fff" />
+    <circle cx="33" cy="28" r="11" fill="#9b98ff" stroke="#fff" strokeWidth="1.8" />
+    <path d="M25 23c3-3 7-5 12-5 2 2 4 4 5 7-4 2-10 3-17 1v-3Z" fill="#c9c7ff" opacity=".85" />
+    <circle cx="29" cy="29" r="2" fill="#7774e8" opacity=".7" />
+    <circle cx="38" cy="34" r="1.7" fill="#7774e8" opacity=".7" />
+    <ellipse cx="33" cy="28" rx="19" ry="7" transform="rotate(-18 33 28)" stroke="var(--sticker-accent)" strokeWidth="2.5" />
+    <path d="m49 11 1.5 4L55 17l-4.5 1.5L49 23l-1.5-4.5L43 17l4.5-2L49 11Z" fill="#fff" />
   </>;
 }
 
-function FallbackSticker() {
-  return <>
-    <circle cx="32" cy="27" r="14" fill="#fff" opacity=".94" />
-    <path d="m32 15 3.5 8.5L44 27l-8.5 3.5L32 39l-3.5-8.5L20 27l8.5-3.5L32 15Z" fill="var(--sticker-accent)" />
-  </>;
+function FallbackArt() {
+  return <path d="m32 14 4 9 9 4-9 4-4 9-4-9-9-4 9-4 4-9Z" fill="#fff" opacity=".96" />;
 }
 
 const stickerArt: Record<SubjectId, ReactNode> = {
-  english: <EnglishSticker />,
-  chinese: <ChineseSticker />,
-  math: <MathSticker />,
-  science: <ScienceSticker />,
+  english: <EnglishArt />,
+  chinese: <ChineseArt />,
+  math: <MathArt />,
+  science: <ScienceArt />,
 };
 
 export function SubjectStickerIcon({ subjectId }: { subjectId: SubjectId }) {
   return <span className={`course-cover subject-sticker subject-sticker-${subjectId}`} data-testid={`subject-sticker-${subjectId}`} aria-hidden="true">
-    <svg viewBox="0 0 64 58" width="56" height="52" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M10 6c5-5 12-3 17-4 6-1 13-3 18 2 5 5 12 7 13 14 1 7-3 12-4 18-1 7-8 12-15 13-7 1-13-3-20-2-7 1-14-3-16-9-3-7 2-13 1-19-1-5 2-10 6-13Z" fill="#fff" />
-      <path d="M11 8c5-4 11-2 16-3 6-1 12-2 17 2 5 4 10 6 11 12 1 6-3 11-4 17-1 6-7 10-13 11-7 1-12-3-19-2-6 1-12-2-14-8-2-6 2-11 1-17-1-5 2-9 5-12Z" fill="var(--sticker-main)" stroke="#fff" strokeWidth="2.5" strokeLinejoin="round" />
-      {stickerArt[subjectId] ?? <FallbackSticker />}
+    <svg viewBox="0 0 64 58" width="48" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="4" width="52" height="50" rx="15" fill="var(--sticker-main)" />
+      <path d="M13 10c6-5 14-3 20-4 8-2 16 2 18 8" stroke="#fff" strokeWidth="4" strokeLinecap="round" opacity=".24" />
+      <path d="M9 39c8 6 18 7 28 4 8-3 15-7 21-15v11c-6 10-18 14-30 14-8 0-15-3-19-8V39Z" fill="#1f3b99" opacity=".13" />
+      {stickerArt[subjectId] ?? <FallbackArt />}
     </svg>
   </span>;
 }
