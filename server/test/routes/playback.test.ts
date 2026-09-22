@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeLearningHarness, parentHeaders } from "./learning-test-utils";
 
 describe("authorized video playback", () => {
@@ -27,6 +27,19 @@ describe("authorized video playback", () => {
       expiresInSeconds: 7200,
     });
     expect(harness.storage.presignGetObject).toHaveBeenCalledWith("videos/private-video.mp4");
+  });
+
+  it("signs the first-frame thumbnail for an accessible READY video", async () => {
+    const harness = makeLearningHarness();
+    apps.push(harness.app);
+    harness.storage.headObject = vi.fn(async () => ({ byteSize: 4_096n, contentType: "image/jpeg" }));
+
+    const response = await harness.app.inject({ method: "GET", url: "/api/videos/video-1/thumbnail", headers: parentHeaders });
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("https://media.example.com/family/video.mp4?X-Amz-Signature=secret");
+    expect(harness.storage.headObject).toHaveBeenCalledWith("thumbnails/video-1.jpg");
+    expect(harness.storage.presignGetObject).toHaveBeenCalledWith("thumbnails/video-1.jpg");
   });
 
   it.each([

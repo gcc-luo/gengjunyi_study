@@ -3,6 +3,7 @@ import type { PrismaClient } from "../generated/prisma/client.js";
 import type { MediaStorage, UploadedPart } from "../storage/minio.js";
 import type { MediaValidationResult } from "./media-validation.js";
 import { mediaContentType, mediaExtension, titleFromMediaFileName } from "./media-formats.js";
+import { thumbnailObjectKey } from "./media-transcoding.js";
 
 export const MEDIA_QUOTA_BYTES = 100_000_000_000n;
 export const UPLOAD_PART_SIZE_BYTES = 16 * 1024 * 1024;
@@ -367,7 +368,7 @@ export async function permanentlyDeleteVideoFiles(
   }
 
   const upload = await prisma.uploadSession.findUnique({ where: { videoId: video.id } });
-  const objectKeys = [...new Set([video.objectKey, upload?.objectKey].filter((key): key is string => Boolean(key)))];
+  const objectKeys = [...new Set([video.objectKey, thumbnailObjectKey(video.id), upload?.objectKey].filter((key): key is string => Boolean(key)))];
   await Promise.all(objectKeys.map((key) => storage.deleteObject(key)));
 
   await prisma.$transaction(async (tx) => {

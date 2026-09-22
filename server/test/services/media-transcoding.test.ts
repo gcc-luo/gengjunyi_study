@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFfmpegArguments, overallProcessingProgress } from "../../src/services/media-transcoding";
+import { buildFfmpegArguments, buildThumbnailFfmpegArguments, overallProcessingProgress } from "../../src/services/media-transcoding";
 
 describe("media transcoding", () => {
   it("builds a browser-compatible H.264/AAC MP4 command", () => {
@@ -27,6 +27,21 @@ describe("media transcoding", () => {
     });
 
     expect(args).toEqual(expect.arrayContaining(["anullsrc=channel_layout=stereo:sample_rate=48000", "-shortest"]));
+  });
+
+  it("captures a compact JPEG thumbnail from the first video frame", () => {
+    const args = buildThumbnailFfmpegArguments({
+      inputPath: "/tmp/output.mp4",
+      outputPath: "/tmp/thumbnail.jpg",
+    });
+
+    expect(args).toEqual(expect.arrayContaining([
+      "-i", "/tmp/output.mp4",
+      "-frames:v", "1",
+      "-vf", "scale=320:-2",
+      "-q:v", "4",
+    ]));
+    expect(args.at(-1)).toBe("/tmp/thumbnail.jpg");
   });
 
   it("maps transcoding percentage into the combined upload-and-processing progress", () => {

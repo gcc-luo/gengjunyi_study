@@ -3,6 +3,7 @@ import { Prisma } from "../generated/prisma/client.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { MediaStorage } from "../storage/minio.js";
 import { canChildAccessCourse } from "../services/courses.js";
+import { ensureVideoThumbnail, thumbnailObjectKey } from "../services/media-transcoding.js";
 import { z } from "zod";
 
 const childParams = z.object({ childId: z.string().min(1).max(128) });
@@ -156,6 +157,26 @@ async function videoSummary(prisma: PrismaClient, videoId: string) {
 }
 
 export function registerLearningRoutes(app: FastifyInstance, prisma: PrismaClient, storage: MediaStorage, timeZone: string): void {
+  app.get("/api/videos/:videoId/thumbnail", { preHandler: app.requireParent }, async (request, reply) => {
+    const params = videoParams.safeParse(request.params);
+    if (!params.success) return error(reply, 400, "BAD_REQUEST", "Video ID is invalid");
+    const child = await getActiveChild(request, reply, prisma);
+    if (!child) return;
+    const video = await prisma.video.findFirst({
+      where: { id: params.data.videoId, status: "READY", course: { status: "PUBLISHED" } },
+      select: { id: true, courseId: true, objectKey: true },
+    });
+    if (!video) return error(reply, 404, "RESOURCE_NOT_FOUND", "Video thumbnail is unavailable");
+    if (!await childCanAccessVideoCourse(request, prisma, child.id, video.courseId)) {
+      return error(reply, 404, "RESOURCE_NOT_FOUND", "Video thumbnail is unavailable");
+    }
+    if (!await ensureVideoThumbnail(storage, video)) {
+      return error(reply, 404, "RESOURCE_NOT_FOUND", "Video thumbnail is unavailable");
+    }
+    const objectKey = thumbnailObjectKey(video.id);
+    return reply.redirect(await storage.presignGetObject(objectKey));
+  });
+
   app.post("/api/videos/:videoId/playback", { preHandler: app.requireParent }, async (request, reply) => {
     const params = videoParams.safeParse(request.params);
     if (!params.success) return error(reply, 400, "BAD_REQUEST", "Video ID is invalid");

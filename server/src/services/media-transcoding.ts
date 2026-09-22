@@ -44,6 +44,26 @@ export function buildFfmpegArguments(input: {
   return args;
 }
 
+export function thumbnailObjectKey(videoId: string): string {
+  return `thumbnails/${videoId}.jpg`;
+}
+
+export function buildThumbnailFfmpegArguments(input: {
+  inputPath: string;
+  outputPath: string;
+}): string[] {
+  return [
+    "-hide_banner",
+    "-loglevel", "error",
+    "-i", input.inputPath,
+    "-frames:v", "1",
+    "-vf", "scale=320:-2",
+    "-q:v", "4",
+    "-y",
+    input.outputPath,
+  ];
+}
+
 type SourceProbe = { durationMs: number; hasAudio: boolean };
 
 async function probeSource(url: string): Promise<SourceProbe> {
@@ -111,6 +131,48 @@ async function transcode(
   });
 }
 
+async function captureThumbnail(inputPath: string, outputPath: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("ffmpeg", buildThumbnailFfmpegArguments({ inputPath, outputPath }), {
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const errors: Buffer[] = [];
+    child.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+    child.once("error", reject);
+    child.once("close", (code) => code === 0
+      ? resolve()
+      : reject(new Error(Buffer.concat(errors).toString("utf8") || `ffmpeg exited with code ${code}`)));
+  });
+}
+
+export async function ensureVideoThumbnail(
+  storage: MediaStorage,
+  input: { id: string; objectKey: string },
+): Promise<boolean> {
+  const objectKey = thumbnailObjectKey(input.id);
+  try {
+    await storage.headObject(objectKey);
+    return true;
+  } catch {
+    // Older READY videos may not have a thumbnail yet; create it on first request.
+  }
+
+  const workingDirectory = await mkdtemp(join(tmpdir(), "family-learning-thumbnail-"));
+  const thumbnailPath = join(workingDirectory, "thumbnail.jpg");
+  try {
+    const sourceUrl = await storage.presignInternalGetObject(input.objectKey);
+    await captureThumbnail(sourceUrl, thumbnailPath);
+    await storage.putObjectFromFile(objectKey, thumbnailPath, "image/jpeg");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await rm(workingDirectory, { recursive: true, force: true });
+  }
+}
+
 async function lockQuotaRow(tx: any): Promise<void> {
   await tx.$queryRaw`SELECT "id" FROM "StorageQuota" WHERE "id" = 1 FOR UPDATE`;
 }
@@ -130,6 +192,8 @@ export async function processNextVideo(prisma: PrismaClient, storage: MediaStora
   const upload = await prisma.uploadSession.findUnique({ where: { videoId: video.id } });
   const workingDirectory = await mkdtemp(join(tmpdir(), "family-learning-transcode-"));
   const outputPath = join(workingDirectory, "output.mp4");
+  const thumbnailPath = join(workingDirectory, "thumbnail.jpg");
+  let thumbnailUploaded = false;
   try {
     if (!upload) throw new Error("找不到源视频上传记录");
     const sourceUrl = await storage.presignInternalGetObject(upload.objectKey);
@@ -143,6 +207,9 @@ export async function processNextVideo(prisma: PrismaClient, storage: MediaStora
         data: { processingProgress: progress },
       }).catch(() => undefined);
     });
+    await captureThumbnail(outputPath, thumbnailPath);
+    await storage.putObjectFromFile(thumbnailObjectKey(video.id), thumbnailPath, "image/jpeg");
+    thumbnailUploaded = true;
     await prisma.video.update({
       where: { id: video.id },
       data: { processingStage: "VERIFYING", processingProgress: 100 },
@@ -151,6 +218,7 @@ export async function processNextVideo(prisma: PrismaClient, storage: MediaStora
     const validation = await validateMediaUrl(await storage.presignInternalGetObject(video.objectKey));
     if (!validation.valid) {
       await storage.deleteObject(video.objectKey).catch(() => undefined);
+      await storage.deleteObject(thumbnailObjectKey(video.id)).catch(() => undefined);
       throw new Error(validation.reason);
     }
     const output = await storage.headObject(video.objectKey);
@@ -179,6 +247,7 @@ export async function processNextVideo(prisma: PrismaClient, storage: MediaStora
       });
     });
   } catch (error) {
+    if (thumbnailUploaded) await storage.deleteObject(thumbnailObjectKey(video.id)).catch(() => undefined);
     const reason = error instanceof Error ? error.message.slice(0, 1000) : "视频转码失败";
     await prisma.video.update({
       where: { id: video.id },

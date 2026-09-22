@@ -188,6 +188,7 @@ export function makeLearningHarness(options: {
     $disconnect: vi.fn(async () => undefined),
   };
   const storage = {
+    headObject: vi.fn(async () => ({ byteSize: 4_096n, contentType: "image/jpeg" })),
     presignGetObject: vi.fn(async () => "https://media.example.com/family/video.mp4?X-Amz-Signature=secret"),
     presignInternalGetObject: vi.fn(async () => "http://minio:9000/family/video.mp4?X-Amz-Signature=secret"),
     close: vi.fn(),

@@ -228,6 +228,8 @@ describe('child learning pages', () => {
     expect(screen.getByText('课程目录')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '课程目录' })).toHaveAttribute('aria-controls', 'course-catalog-panel');
     expect(screen.getByRole('tabpanel')).toHaveAttribute('id', 'course-catalog-panel');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-label', '课程目录，可滚动查看更多');
+    expect(within(screen.getByTestId('video-row-ready-video')).getByRole('img', { name: '认识数字视频缩略图' })).toHaveAttribute('src', '/api/videos/ready-video/thumbnail');
     expect(screen.getByRole('link', { name: /认识数字/ })).toHaveAttribute('href', '/child/watch/ready-video');
     expect(within(screen.getByTestId('video-row-loading-video')).getByText('暂不可播放')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '课程介绍' }));
