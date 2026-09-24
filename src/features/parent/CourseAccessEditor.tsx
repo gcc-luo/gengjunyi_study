@@ -30,7 +30,8 @@ export function CourseAccessEditor({ open, child, courses, onClose, onSaved }: P
     setSaving(true);
     setError('');
     try {
-      await apiRequest(`/api/children/${encodeURIComponent(child.id)}/course-access`, { method: 'PUT', body: JSON.stringify({ courseIds: selected }) });
+      const saved = await apiRequest<CourseAccess>(`/api/children/${encodeURIComponent(child.id)}/course-access`, { method: 'PUT', body: JSON.stringify({ courseIds: selected }) });
+      queryClient.setQueryData(['parent', 'child-course-access', child.id], saved);
       await queryClient.invalidateQueries({ queryKey: ['child'] });
       onSaved();
     } catch (cause) {
